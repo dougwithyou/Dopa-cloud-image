@@ -1,9 +1,8 @@
+import Link from "next/link";
 import { requireCreator } from "@/lib/auth";
-import { canUpload } from "@/lib/subscription";
 import { formatDate } from "@/lib/format";
 import { SubmitButton } from "@/components/submit-button";
-import { InviteClientForm } from "../forms";
-import { deleteClient, resendInvite } from "../actions";
+import { deleteClient, resendAccess } from "../actions";
 
 export const metadata = { title: "Clientes" };
 
@@ -15,12 +14,6 @@ export default async function ClientsPage() {
     .order("created_at", { ascending: false });
 
   const count = clients?.length ?? 0;
-  const atLimit = creator.client_limit !== null && count >= creator.client_limit;
-  const disabledReason = !canUpload(creator)
-    ? "Tu suscripción no está activa: no puedes invitar clientes nuevos."
-    : atLimit
-      ? `Tu plan permite ${creator.client_limit} clientes. Cambia de plan para invitar más.`
-      : undefined;
 
   return (
     <div className="space-y-8">
@@ -31,10 +24,11 @@ export default async function ClientsPage() {
         </p>
       </div>
 
-      <section className="card p-5">
-        <h2 className="mb-4 font-semibold">Invitar cliente</h2>
-        <InviteClientForm disabledReason={disabledReason} />
-      </section>
+      <div className="rounded-2xl border border-neutral-200 bg-white p-5 text-sm text-neutral-600">
+        Para agregar un cliente, abre un{" "}
+        <Link href="/dashboard/projects" className="font-semibold text-neutral-900">proyecto</Link> y pulsa{" "}
+        <strong>Agregar cliente</strong>. Recibirá su acceso por correo cuando publiques el proyecto.
+      </div>
 
       <section>
         {clients && clients.length > 0 ? (
@@ -48,27 +42,35 @@ export default async function ClientsPage() {
                     <p className="truncate text-sm text-neutral-500">{client.email}</p>
                     <p className="mt-1 text-xs text-neutral-500">
                       {client.user_id ? (
-                        <span className="badge bg-green-50 text-green-700">Activo desde {formatDate(client.accepted_at)}</span>
-                      ) : (
+                        <span className="badge bg-green-50 text-green-700">Con acceso desde {formatDate(client.accepted_at)}</span>
+                      ) : client.invited_at ? (
                         <span className="badge bg-amber-50 text-amber-700">
-                          Invitación pendiente{client.invited_at ? ` · enviada ${formatDate(client.invited_at)}` : ""}
+                          Acceso enviado el {formatDate(client.invited_at)}, aún no ha entrado
                         </span>
+                      ) : (
+                        <span className="badge bg-neutral-100 text-neutral-700">Sin acceso todavía</span>
                       )}
-                      <span className="ml-2">{projectCount} proyectos</span>
+                      <span className="ml-2">
+                        {projectCount} {projectCount === 1 ? "proyecto" : "proyectos"}
+                      </span>
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-2">
                     {!client.user_id ? (
-                      <form action={resendInvite}>
+                      <form action={resendAccess}>
                         <input type="hidden" name="clientId" value={client.id} />
                         <SubmitButton className="btn-secondary px-3 py-1.5 text-xs" pendingLabel="Enviando…">
-                          Reenviar invitación
+                          {client.invited_at ? "Reenviar acceso" : "Enviar acceso"}
                         </SubmitButton>
                       </form>
                     ) : null}
                     <form action={deleteClient}>
                       <input type="hidden" name="clientId" value={client.id} />
-                      <SubmitButton className="btn-danger px-3 py-1.5 text-xs" pendingLabel="Eliminando…" confirm={`¿Eliminar a ${client.name} con todos sus proyectos y archivos? No se puede deshacer.`}>
+                      <SubmitButton
+                        className="btn-danger px-3 py-1.5 text-xs"
+                        pendingLabel="Eliminando…"
+                        confirm={`¿Eliminar a ${client.name}? Sus proyectos y archivos se conservan, pero quedarán sin cliente.`}
+                      >
                         Eliminar
                       </SubmitButton>
                     </form>
@@ -78,11 +80,10 @@ export default async function ClientsPage() {
             })}
           </ul>
         ) : (
-          <div className="card p-8 text-center text-sm text-neutral-500">Todavía no has invitado a ningún cliente.</div>
+          <div className="card p-8 text-center text-sm text-neutral-500">
+            Todavía no tienes clientes. Agrégalos desde tus proyectos.
+          </div>
         )}
-        <p className="mt-3 text-xs text-neutral-500">
-          Eliminar un cliente borra también sus proyectos y archivos de forma permanente.
-        </p>
       </section>
     </div>
   );

@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { FormMessage, SubmitButton } from "@/components/submit-button";
-import { addCopy, createProject, inviteClient, updateBusinessName } from "./actions";
+import { addClientToProject, addCopy, createProject, updateBusinessName } from "./actions";
 
 function useResetOnSuccess(state: { message?: string } | null) {
   const ref = useRef<HTMLFormElement>(null);
@@ -12,53 +12,16 @@ function useResetOnSuccess(state: { message?: string } | null) {
   return ref;
 }
 
-export function InviteClientForm({ disabledReason }: { disabledReason?: string }) {
-  const [state, action] = useActionState(inviteClient, null);
-  const ref = useResetOnSuccess(state);
-  return (
-    <form ref={ref} action={action} className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label className="label" htmlFor="name">Nombre</label>
-          <input className="input" id="name" name="name" placeholder="Café Aurora" required maxLength={120} />
-        </div>
-        <div>
-          <label className="label" htmlFor="email">Correo</label>
-          <input className="input" id="email" name="email" type="email" placeholder="hola@cafeaurora.com" required />
-        </div>
-      </div>
-      {disabledReason ? <p className="text-sm text-amber-700">{disabledReason}</p> : null}
-      <FormMessage state={state} />
-      <SubmitButton className="btn-primary" pendingLabel="Enviando invitación…">
-        Invitar cliente
-      </SubmitButton>
-    </form>
-  );
-}
-
-export function CreateProjectForm({ clients }: { clients: { id: string; name: string }[] }) {
+export function CreateProjectForm() {
   const [state, action] = useActionState(createProject, null);
-  if (clients.length === 0) {
-    return <p className="text-sm text-neutral-500">Primero invita a un cliente.</p>;
-  }
   return (
     <form action={action} className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="sm:col-span-1">
-          <label className="label" htmlFor="clientId">Cliente</label>
-          <select className="input" id="clientId" name="clientId" required>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="sm:col-span-1">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
           <label className="label" htmlFor="title">Título</label>
           <input className="input" id="title" name="title" placeholder="Contenido de diciembre" required maxLength={160} />
         </div>
-        <div className="sm:col-span-1">
+        <div>
           <label className="label" htmlFor="type">Tipo</label>
           <select className="input" id="type" name="type" defaultValue="monthly_content">
             <option value="monthly_content">Contenido mensual</option>
@@ -69,6 +32,72 @@ export function CreateProjectForm({ clients }: { clients: { id: string; name: st
       <FormMessage state={state} />
       <SubmitButton className="btn-primary" pendingLabel="Creando…">
         Crear proyecto
+      </SubmitButton>
+      <p className="text-xs text-neutral-500">Después podrás subir el contenido y agregar al cliente.</p>
+    </form>
+  );
+}
+
+/**
+ * Agregar cliente al proyecto: elegir uno existente o crear uno nuevo
+ * (nombre + correo) en el mismo formulario.
+ */
+export function AddClientToProjectForm({
+  projectId,
+  clients,
+  currentClientId,
+  disabledReason,
+  submitLabel = "Agregar cliente",
+}: {
+  projectId: string;
+  clients: { id: string; name: string; email: string }[];
+  currentClientId?: string | null;
+  disabledReason?: string;
+  submitLabel?: string;
+}) {
+  const [state, action] = useActionState(addClientToProject, null);
+  const options = clients.filter((c) => c.id !== currentClientId);
+  const [choice, setChoice] = useState<string>(options[0]?.id ?? "new");
+  const isNew = choice === "new";
+
+  return (
+    <form action={action} className="space-y-3">
+      <input type="hidden" name="projectId" value={projectId} />
+      <div>
+        <label className="label" htmlFor="clientId">Cliente</label>
+        <select
+          className="input"
+          id="clientId"
+          name="clientId"
+          value={choice}
+          onChange={(e) => setChoice(e.target.value)}
+        >
+          {options.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name} · {c.email}
+            </option>
+          ))}
+          <option value="new">+ Nuevo cliente</option>
+        </select>
+      </div>
+
+      {isNew ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label" htmlFor="name">Nombre</label>
+            <input className="input" id="name" name="name" placeholder="Café Aurora" required maxLength={120} />
+          </div>
+          <div>
+            <label className="label" htmlFor="email">Correo</label>
+            <input className="input" id="email" name="email" type="email" placeholder="hola@cafeaurora.com" required />
+          </div>
+        </div>
+      ) : null}
+
+      {isNew && disabledReason ? <p className="text-sm text-amber-700">{disabledReason}</p> : null}
+      <FormMessage state={state} />
+      <SubmitButton className="btn-primary" pendingLabel="Agregando…">
+        {submitLabel}
       </SubmitButton>
     </form>
   );

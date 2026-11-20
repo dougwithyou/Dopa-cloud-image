@@ -13,13 +13,10 @@ const STATUS_STYLE = {
 
 export default async function ProjectsPage() {
   const { supabase } = await requireCreator();
-  const [{ data: clients }, { data: projects }] = await Promise.all([
-    supabase.from("clients").select("id, name").order("name"),
-    supabase
-      .from("projects")
-      .select("id, title, type, status, created_at, clients(name), assets(count)")
-      .order("created_at", { ascending: false }),
-  ]);
+  const { data: projects } = await supabase
+    .from("projects")
+    .select("id, title, type, status, created_at, clients(name), assets(count)")
+    .order("created_at", { ascending: false });
 
   return (
     <div className="space-y-8">
@@ -27,7 +24,7 @@ export default async function ProjectsPage() {
 
       <section className="card p-5">
         <h2 className="mb-4 font-semibold">Nuevo proyecto</h2>
-        <CreateProjectForm clients={clients ?? []} />
+        <CreateProjectForm />
       </section>
 
       {projects && projects.length > 0 ? (
@@ -41,7 +38,9 @@ export default async function ProjectsPage() {
                     <p className="font-semibold">{p.title}</p>
                     <span className={`badge ${STATUS_STYLE[p.status]}`}>{PROJECT_STATUS_LABEL[p.status]}</span>
                   </div>
-                  <p className="mt-1 text-sm text-neutral-500">{p.clients?.name}</p>
+                  <p className="mt-1 text-sm text-neutral-500">
+                    {p.clients?.name ?? <span className="text-amber-700">Sin cliente</span>}
+                  </p>
                   <p className="mt-3 text-xs text-neutral-500">
                     {PROJECT_TYPE_LABEL[p.type]} · {assetCount} elementos · {formatDate(p.created_at)}
                   </p>

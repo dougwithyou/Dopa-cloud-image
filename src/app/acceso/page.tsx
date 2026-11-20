@@ -3,17 +3,18 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { APP_NAME } from "@/lib/env";
-import { AcceptInviteForm } from "./form";
+import { AccessForm } from "./form";
 
-export const metadata = { title: "Aceptar invitación" };
+export const metadata = { title: "Accede a tu contenido" };
 
-export default async function AcceptInvitePage({
+/** Destino del enlace de acceso que recibe el cliente por correo. */
+export default async function AccessPage({
   searchParams,
 }: {
   searchParams: Promise<{ client?: string; new?: string }>;
 }) {
   const { client: clientId, new: isNew } = await searchParams;
-  const { user } = await requireUser(`/invite/accept?client=${clientId ?? ""}`);
+  const { user } = await requireUser(`/acceso?client=${clientId ?? ""}`);
 
   const admin = createAdminClient();
   const { data: client } = clientId
@@ -34,9 +35,9 @@ export default async function AcceptInvitePage({
       <div className="card w-full max-w-sm p-6 sm:p-8">
         {!client || !matches || (client.user_id && client.user_id !== user.id) ? (
           <>
-            <h1 className="mb-2 text-xl font-semibold">Invitación no válida</h1>
+            <h1 className="mb-2 text-xl font-semibold">Enlace no válido</h1>
             <p className="text-sm text-neutral-600">
-              Esta invitación no corresponde a la cuenta {user.email} o ya fue usada.
+              Este enlace no corresponde a la cuenta {user.email} o ya fue usado.
             </p>
             <Link href="/portal" className="btn-secondary mt-6 w-full">Ir a mi portal</Link>
           </>
@@ -44,9 +45,9 @@ export default async function AcceptInvitePage({
           <>
             <h1 className="mb-1 text-xl font-semibold">Hola, {client.name}</h1>
             <p className="mb-6 text-sm text-neutral-600">
-              {creator?.business_name ?? "Tu creador"} te invitó a ver tu contenido en un portal privado.
+              {creator?.business_name ?? "Tu creador"} compartió contigo tu contenido en un portal privado.
             </p>
-            <AcceptInviteForm clientId={client.id} isNewUser={isNew === "1"} />
+            <AccessForm clientId={client.id} isNewUser={isNew === "1"} />
           </>
         )}
       </div>

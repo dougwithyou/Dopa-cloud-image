@@ -5,7 +5,8 @@
 import { PGlite } from "@electric-sql/pglite";
 import { readFileSync } from "node:fs";
 
-const migration = readFileSync(process.argv[2], "utf8");
+// Aplica todas las migraciones recibidas como argumentos, en orden.
+const migrations = process.argv.slice(2).map((f) => readFileSync(f, "utf8"));
 const db = new PGlite();
 
 await db.exec(`
@@ -25,8 +26,8 @@ await db.exec(`
   alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 `);
 
-await db.exec(migration);
-console.log("✓ Migración aplicada sin errores");
+for (const m of migrations) await db.exec(m);
+console.log(`✓ ${migrations.length} migraciones aplicadas sin errores`);
 
 const U = {
   creatorA: "00000000-0000-0000-0000-00000000000a",
@@ -227,6 +228,44 @@ await db.exec(`set role anon;`);
 check("anon no puede leer assets", /permission denied/.test(await fails(`select * from public.assets`)));
 await db.exec(`reset role;`);
 
+// ---------- Proyectos sin cliente / agregar cliente al proyecto ----------
+await as(U.creatorA, async () => {
+  const noClient = await db.query(
+    `insert into public.projects (creator_id, title, type) values ('${cA}','Sin cliente','photo_session') returning id, client_id`,
+  );
+  check("Creador puede crear un proyecto sin cliente", noClient.rows.length === 1 && noClient.rows[0].client_id === null);
+  const pNoClient = noClient.rows[0].id;
+
+  const assigned = await db.query(
+    `update public.projects set client_id = '${clA2}' where id = '${pNoClient}' returning client_id`,
+  );
+  check("Creador puede agregar su cliente al proyecto", assigned.rows[0]?.client_id === clA2);
+  check(
+    "Creador no puede agregar un cliente de otro creador",
+    (await fails(`update public.projects set client_id = '${clB1}' where id = '${pNoClient}'`)) !== null,
+  );
+  await db.query(`update public.projects set client_id = null where id = '${pNoClient}'`);
+  const removed = await db.query(`select client_id from public.projects where id = '${pNoClient}'`);
+  check("Creador puede quitar el cliente del proyecto", removed.rows[0].client_id === null);
+});
+
+// Eliminar un cliente conserva sus proyectos (client_id -> NULL)
+{
+  const tmp = await db.query(
+    `insert into public.clients (creator_id, name, email) values ('${cB}','Temporal','tmp@x.com') returning id`,
+  );
+  const tmpClient = tmp.rows[0].id;
+  const tmpProj = await db.query(
+    `insert into public.projects (creator_id, client_id, title, type) values ('${cB}','${tmpClient}','Del temporal','photo_session') returning id`,
+  );
+  await db.query(`delete from public.clients where id = '${tmpClient}'`);
+  const after = await db.query(`select creator_id, client_id from public.projects where id = '${tmpProj.rows[0].id}'`);
+  check(
+    "Eliminar un cliente conserva sus proyectos sin cliente",
+    after.rows.length === 1 && after.rows[0].client_id === null && after.rows[0].creator_id === cB,
+  );
+}
+
 // ---------- Periodo de gracia ----------
 await db.exec(`update public.creators set subscription_status = 'canceled', portal_access_until = now() + interval '14 days' where id = '${cA}'`);
 await as(U.clientA1, async () => {
@@ -241,7 +280,7 @@ await as(U.clientA1, async () => {
 });
 await as(U.creatorA, async () => {
   const p = await db.query(`select id from public.projects`);
-  check("Gracia vencida: el creador sigue viendo sus datos", p.rows.length === 3);
+  check("Gracia vencida: el creador sigue viendo sus datos", p.rows.length === 4);
 });
 
 // ---------- reserve_asset_upload (service role) ----------

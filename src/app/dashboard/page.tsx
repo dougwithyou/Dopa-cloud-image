@@ -26,7 +26,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     <div className="space-y-8">
       {checkout === "success" ? (
         <p className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-800">
-          ¡Listo! Tu prueba de 30 días comenzó. Empieza invitando a tu primer cliente.
+          ¡Listo! Tu prueba de 30 días comenzó. Empieza creando tu primer proyecto.
         </p>
       ) : null}
 
@@ -70,7 +70,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 <Link href={`/dashboard/projects/${p.id}`} className="flex items-center justify-between px-5 py-3 hover:bg-neutral-50">
                   <span>
                     <span className="font-medium">{p.title}</span>
-                    <span className="ml-2 text-sm text-neutral-500">{p.clients?.name}</span>
+                    <span className="ml-2 text-sm text-neutral-500">{p.clients?.name ?? "Sin cliente"}</span>
                   </span>
                   <span className="text-xs text-neutral-500">{PROJECT_STATUS_LABEL[p.status]}</span>
                 </Link>
@@ -80,7 +80,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         ) : (
           <div className="card p-8 text-center text-sm text-neutral-500">
             Aún no tienes proyectos.{" "}
-            <Link href="/dashboard/clients" className="font-semibold text-neutral-900">Invita a un cliente</Link> y crea el primero.
+            <Link href="/dashboard/projects" className="font-semibold text-neutral-900">Crea el primero</Link> y agrégale un cliente.
           </div>
         )}
       </section>

@@ -2,10 +2,10 @@
 
 import { useActionState } from "react";
 import { FormMessage, SubmitButton } from "@/components/submit-button";
-import { acceptInvite } from "../actions";
+import { claimAccess } from "./actions";
 
-export function AcceptInviteForm({ clientId, isNewUser }: { clientId: string; isNewUser: boolean }) {
-  const [state, action] = useActionState(acceptInvite, null);
+export function AccessForm({ clientId, isNewUser }: { clientId: string; isNewUser: boolean }) {
+  const [state, action] = useActionState(claimAccess, null);
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="clientId" value={clientId} />
@@ -24,7 +24,7 @@ export function AcceptInviteForm({ clientId, isNewUser }: { clientId: string; is
         </>
       ) : null}
       <FormMessage state={state} />
-      <SubmitButton pendingLabel="Entrando…">{isNewUser ? "Crear contraseña y entrar" : "Aceptar invitación"}</SubmitButton>
+      <SubmitButton pendingLabel="Entrando…">{isNewUser ? "Crear contraseña y entrar" : "Entrar a mi portal"}</SubmitButton>
     </form>
   );
 }

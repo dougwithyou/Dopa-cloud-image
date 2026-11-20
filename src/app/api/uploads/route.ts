@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   // RLS: solo devuelve el proyecto si pertenece al creador autenticado.
   const { data: project } = await supabase
     .from("projects")
-    .select("id, client_id, creator_id")
+    .select("id, creator_id")
     .eq("id", projectId)
     .eq("creator_id", creator.id)
     .maybeSingle();
@@ -51,7 +51,6 @@ export async function POST(req: NextRequest) {
   const assetId = randomUUID();
   const key = buildAssetKey({
     creatorId: creator.id,
-    clientId: project.client_id,
     projectId: project.id,
     assetId,
     kind: validation.kind,

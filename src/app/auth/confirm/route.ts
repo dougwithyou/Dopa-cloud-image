@@ -9,7 +9,7 @@ const OTP_TYPES: EmailOtpType[] = ["signup", "invite", "magiclink", "recovery", 
 
 /**
  * Destino de todos los enlaces de correo (confirmación, recuperación,
- * invitación). Acepta:
+ * acceso de clientes). Acepta:
  *  - ?token_hash=...&type=...  (plantillas de correo recomendadas; funciona en otro dispositivo)
  *  - ?code=...                 (flujo PKCE por defecto de Supabase)
  */
@@ -30,6 +30,6 @@ export async function GET(request: NextRequest) {
     if (!error) return NextResponse.redirect(new URL(next, origin));
   }
 
-  const fallback = next.startsWith("/invite/accept") ? "/invite/expired" : "/login?error=link";
+  const fallback = next.startsWith("/acceso") ? "/enlace-caducado" : "/login?error=link";
   return NextResponse.redirect(new URL(fallback, origin));
 }

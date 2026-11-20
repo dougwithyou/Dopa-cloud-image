@@ -7,8 +7,15 @@ import { ACCEPT_ATTRIBUTE } from "@/lib/upload-rules";
 import { formatBytes, PROJECT_STATUS_LABEL, PROJECT_TYPE_LABEL } from "@/lib/format";
 import { Uploader } from "@/components/uploader";
 import { SubmitButton } from "@/components/submit-button";
-import { AddCopyForm } from "../../forms";
-import { deleteAsset, deleteProject, moveAsset, updateCaption, updateProjectStatus } from "../../actions";
+import { AddClientToProjectForm, AddCopyForm } from "../../forms";
+import {
+  deleteAsset,
+  deleteProject,
+  moveAsset,
+  removeClientFromProject,
+  updateCaption,
+  updateProjectStatus,
+} from "../../actions";
 
 export const metadata = { title: "Proyecto" };
 
@@ -18,10 +25,19 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
 
   const { data: project } = await supabase
     .from("projects")
-    .select("id, title, type, status, client_id, clients(name, user_id)")
+    .select("id, title, type, status, client_id, clients(name, email, user_id, invited_at)")
     .eq("id", projectId)
     .maybeSingle();
   if (!project) notFound();
+
+  const { data: clients } = await supabase.from("clients").select("id, name, email").order("name");
+  const client = project.clients;
+  const atClientLimit = creator.client_limit !== null && (clients?.length ?? 0) >= creator.client_limit;
+  const newClientBlocked = !canUpload(creator)
+    ? "Tu suscripción no está activa: no puedes agregar clientes nuevos."
+    : atClientLimit
+      ? `Tu plan permite ${creator.client_limit} clientes. Elige uno existente o cambia de plan.`
+      : undefined;
 
   const { data: assets } = await supabase
     .from("assets")
@@ -51,7 +67,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{project.title}</h1>
             <p className="text-neutral-500">
-              {project.clients?.name} · {PROJECT_TYPE_LABEL[project.type]} · {PROJECT_STATUS_LABEL[project.status]}
+              {client?.name ?? "Sin cliente"} · {PROJECT_TYPE_LABEL[project.type]} · {PROJECT_STATUS_LABEL[project.status]}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -62,7 +78,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
                   <input type="hidden" name="projectId" value={project.id} />
                   <input type="hidden" name="status" value={status} />
                   <SubmitButton className={status === "published" ? "btn-brand" : "btn-secondary"} pendingLabel="…">
-                    {status === "published" ? "Publicar para el cliente" : status === "draft" ? "Pasar a borrador" : "Archivar"}
+                    {status === "published" ? "Publicar" : status === "draft" ? "Pasar a borrador" : "Archivar"}
                   </SubmitButton>
                 </form>
               ))}
@@ -70,13 +86,70 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
         </div>
         {project.status === "published" ? (
           <p className="mt-3 text-sm text-green-700">
-            Visible en el portal de {project.clients?.name}
-            {project.clients?.user_id ? "." : " (cuando acepte la invitación)."}
+            {client
+              ? client.user_id
+                ? `Publicado: visible en el portal de ${client.name}.`
+                : `Publicado. ${client.name} lo verá cuando entre con el enlace que le enviamos por correo.`
+              : "Publicado, pero sin cliente: agrega uno para que alguien lo vea."}
           </p>
         ) : project.status === "draft" ? (
-          <p className="mt-3 text-sm text-neutral-500">Borrador: tu cliente aún no lo ve.</p>
+          <p className="mt-3 text-sm text-neutral-500">
+            Borrador: solo tú lo ves. Cuando lo publiques, {client ? client.name : "el cliente"} recibirá su acceso.
+          </p>
         ) : null}
       </div>
+
+      <section className="card p-5">
+        <h2 className="mb-1 font-semibold">Cliente</h2>
+        {client ? (
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-medium">{client.name}</p>
+                <p className="text-sm text-neutral-500">{client.email}</p>
+                <p className="mt-1 text-xs">
+                  {client.user_id ? (
+                    <span className="badge bg-green-50 text-green-700">Ya tiene acceso a su portal</span>
+                  ) : client.invited_at ? (
+                    <span className="badge bg-amber-50 text-amber-700">Acceso enviado, aún no ha entrado</span>
+                  ) : (
+                    <span className="badge bg-neutral-100 text-neutral-700">Recibirá su acceso al publicar</span>
+                  )}
+                </p>
+              </div>
+              <form action={removeClientFromProject}>
+                <input type="hidden" name="projectId" value={project.id} />
+                <SubmitButton
+                  className="btn-secondary px-3 py-1.5 text-xs"
+                  pendingLabel="Quitando…"
+                  confirm={`¿Quitar a ${client.name} de este proyecto? Dejará de verlo en su portal.`}
+                >
+                  Quitar del proyecto
+                </SubmitButton>
+              </form>
+            </div>
+            <details>
+              <summary className="cursor-pointer text-sm text-neutral-500 hover:text-neutral-900">Cambiar de cliente</summary>
+              <div className="mt-3">
+                <AddClientToProjectForm
+                  projectId={project.id}
+                  clients={clients ?? []}
+                  currentClientId={project.client_id}
+                  disabledReason={newClientBlocked}
+                  submitLabel="Cambiar cliente"
+                />
+              </div>
+            </details>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-neutral-500">
+              Este proyecto aún no tiene cliente. Agrégalo para que pueda verlo en su portal.
+            </p>
+            <AddClientToProjectForm projectId={project.id} clients={clients ?? []} disabledReason={newClientBlocked} />
+          </div>
+        )}
+      </section>
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div>

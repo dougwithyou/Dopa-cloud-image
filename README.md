@@ -34,7 +34,7 @@ src/
     limits.ts                      Uso actual y comprobación de límites del plan
     subscription.ts                Reglas de estado: puede subir, días de prueba, periodo de gracia
     stripe.ts / billing.ts         Cliente Stripe, Checkout, Customer Portal y sincronización
-    email.ts / invitations.ts      Correos con Resend e invitaciones de clientes
+    email.ts / invitations.ts      Correos con Resend y enlaces de acceso para clientes
     auth.ts                        Sesión, creador actual y redirecciones
     supabase/{server,admin,client} Clientes de Supabase (sesión con RLS / service role / navegador)
   app/
@@ -43,7 +43,7 @@ src/
     onboarding/                    Nombre del negocio + plan → Stripe Checkout
     dashboard/                     Panel del creador: resumen, clientes, proyectos, subida, suscripción
     portal/                        Portal del cliente: proyectos y feed
-    invite/accept                  El cliente crea su contraseña y queda vinculado
+    acceso/                        El cliente crea su contraseña y queda vinculado (enlace del correo)
     api/uploads/...                Iniciar, firmar partes, completar y abortar subidas multipart
     api/assets/[id]/download       Descarga mediante redirección a una URL firmada de R2
     api/stripe/{checkout,portal,webhook}
@@ -136,10 +136,10 @@ stripe listen --forward-to localhost:3000/api/stripe/webhook \
      `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/onboarding`
    - **Reset password:**
      `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password`
-   - Las invitaciones de clientes **no** usan la plantilla de Supabase. Se generan con `auth.admin.generateLink` y se envían con Resend.
+   - Los correos de acceso de clientes **no** usan la plantilla de Supabase. Se generan con `auth.admin.generateLink` y se envían con Resend.
 7. *Authentication → SMTP Settings*: activa **Custom SMTP** con Resend para que los correos de Auth salgan de tu dominio:
    host `smtp.resend.com`, puerto `465`, usuario `resend`, contraseña = tu `RESEND_API_KEY`, remitente `invite@cloud.hidopastudio.com`.
-8. *Authentication → Providers → Email → Email OTP Expiration*: súbelo a `86400` (24 h). Ese valor es el que anuncia el correo de invitación.
+8. *Authentication → Providers → Email → Email OTP Expiration*: súbelo a `86400` (24 h). Ese valor es el que anuncia el correo de acceso del cliente.
 
 > Si cambias el esquema, regenera los tipos con `npx supabase gen types typescript --project-id <ref> > src/types/database.ts`.
 
@@ -216,7 +216,7 @@ Correos que envía la app:
 
 | Correo | Cuándo | Reply-To |
 |---|---|---|
-| Invitación de cliente | El creador invita o reenvía | Correo del creador |
+| Acceso de cliente | Se publica un proyecto con un cliente sin acceso, se agrega un cliente a un proyecto ya publicado, o el creador pulsa "Reenviar acceso" | Correo del creador |
 | Fin de prueba | `trial_will_end`, unos 3 días antes del cobro | — |
 | Pago fallido | `invoice.payment_failed` | — |
 | Confirmación y recuperación | Supabase Auth vía SMTP de Resend | — |
@@ -240,7 +240,7 @@ Correos que envía la app:
 ### Checklist después del despliegue
 
 - [ ] Registro → correo de confirmación → onboarding → Checkout (tarjeta 4242) → panel con «30 días de prueba».
-- [ ] Invitar a un cliente → llega el correo desde `invite@cloud.hidopastudio.com` → crea su contraseña → `/portal`.
+- [ ] Crear un proyecto → agregarle un cliente → publicarlo → al cliente le llega el correo desde `invite@cloud.hidopastudio.com` → crea su contraseña → `/portal`.
 - [ ] Subir una foto y un video de más de 300 MB, publicar el proyecto y verlo en el portal del cliente. Probar descarga y copia de texto.
 - [ ] En *Developers → Webhooks* de Stripe, todos los eventos responden 200.
 - [ ] Con un segundo creador, comprobar que no ve nada del primero.
@@ -275,11 +275,12 @@ Correos que envía la app:
 
 Cambios o añadidos respecto a la especificación original:
 
-- **Clave en R2:** `.../{photos|videos}/{asset_id}-{file_name}`. Se añade el id del asset delante del nombre para que dos archivos con el mismo nombre no se sobrescriban. `file_name` conserva el nombre original, que es el que se usa al descargar.
+- **Clave en R2:** `creators/{creator_id}/projects/{project_id}/{photos|videos}/{asset_id}-{file_name}`. El cliente **no** forma parte de la ruta: un proyecto se crea sin cliente y lo recibe (o lo cambia) después sin mover archivos. Se añade el id del asset delante del nombre para que dos archivos con el mismo nombre no se sobrescriban. `file_name` conserva el nombre original, que es el que se usa al descargar.
+- **Proyecto primero, cliente después** (migración `20261120000000_projects_optional_client.sql`). `projects.client_id` es opcional. El creador crea el proyecto, sube el contenido y, dentro del proyecto, pulsa **Agregar cliente** (uno existente o uno nuevo con nombre y correo). El cliente recibe su enlace de acceso cuando el proyecto se publica. Si se elimina un cliente, sus proyectos y archivos se conservan sin cliente asignado.
 - **`projects.status`:** `draft | published | archived`. El cliente solo ve proyectos `published`, así el creador puede preparar el contenido antes de entregarlo.
 - **Columnas extra:**
   - `creators.portal_access_until` (fin del periodo de gracia) y `updated_at`.
-  - `clients.invited_at` y `accepted_at`.
+  - `clients.invited_at` (cuándo se envió el acceso) y `accepted_at`.
   - `assets.r2_upload_id` y `completed_at`.
   - `stripe_events.received_at`.
 - **Textos:** un asset `copy` es un texto suelto que aparece como tarjeta en el feed. Las fotos y videos también pueden llevar `copy_text` como caption, que el cliente copia con un clic.

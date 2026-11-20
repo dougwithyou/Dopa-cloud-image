@@ -58,22 +58,18 @@ export function sanitizeFileName(name: string): string {
   return (cleaned || "archivo").slice(-120);
 }
 
-export function projectPrefix(p: { creatorId: string; clientId: string; projectId: string }): string {
-  return `creators/${p.creatorId}/clients/${p.clientId}/projects/${p.projectId}/`;
-}
-
-export function clientPrefix(p: { creatorId: string; clientId: string }): string {
-  return `creators/${p.creatorId}/clients/${p.clientId}/`;
+export function projectPrefix(p: { creatorId: string; projectId: string }): string {
+  return `creators/${p.creatorId}/projects/${p.projectId}/`;
 }
 
 /**
- * creators/{creator_id}/clients/{client_id}/projects/{project_id}/{photos|videos}/{asset_id}-{file_name}
- * El id del asset delante del nombre evita que dos archivos con el mismo
- * nombre se sobrescriban.
+ * creators/{creator_id}/projects/{project_id}/{photos|videos}/{asset_id}-{file_name}
+ * El cliente no forma parte de la ruta: un proyecto puede crearse sin cliente
+ * y recibirlo (o cambiarlo) después sin mover archivos. El id del asset
+ * delante del nombre evita que dos archivos con el mismo nombre se sobrescriban.
  */
 export function buildAssetKey(p: {
   creatorId: string;
-  clientId: string;
   projectId: string;
   assetId: string;
   kind: "photo" | "video";

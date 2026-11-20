@@ -56,21 +56,21 @@ async function send(opts: { to: string; subject: string; html: string; text: str
   if (error) throw new Error(`Resend: ${error.message}`);
 }
 
-export async function sendClientInvite(opts: {
+export async function sendClientAccessEmail(opts: {
   to: string;
   clientName: string;
   creatorName: string;
   link: string;
   replyTo?: string;
 }) {
-  const subject = `${opts.creatorName} te invitó a ver tu contenido`;
+  const subject = `${opts.creatorName} compartió contenido contigo`;
   const html = layout(
     `Hola ${opts.clientName}`,
-    `<p style="line-height:1.6">${escapeHtml(opts.creatorName)} compartió contigo un portal privado con tus fotos, videos y textos listos para publicar.</p>
-     ${button(opts.link, "Aceptar invitación")}
-     <p style="color:#666;font-size:13px;line-height:1.5">El enlace caduca en 24 horas. Si caducó, pide a ${escapeHtml(opts.creatorName)} que te reenvíe la invitación.</p>`,
+    `<p style="line-height:1.6">${escapeHtml(opts.creatorName)} preparó tus fotos, videos y textos listos para publicar en un portal privado.</p>
+     ${button(opts.link, "Ver mi contenido")}
+     <p style="color:#666;font-size:13px;line-height:1.5">El enlace es personal y caduca en 24 horas. Si caducó, pide a ${escapeHtml(opts.creatorName)} que te reenvíe el acceso.</p>`,
   );
-  const text = `Hola ${opts.clientName}:\n\n${opts.creatorName} compartió contigo un portal privado con tu contenido.\nAcepta la invitación aquí: ${opts.link}\n\nEl enlace caduca en 24 horas.`;
+  const text = `Hola ${opts.clientName}:\n\n${opts.creatorName} preparó tu contenido en un portal privado.\nEntra aquí: ${opts.link}\n\nEl enlace es personal y caduca en 24 horas.`;
   await send({ to: opts.to, subject, html, text, replyTo: opts.replyTo });
 }
 

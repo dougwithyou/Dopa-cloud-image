@@ -9,7 +9,7 @@
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "stripe:setup": "node --experimental-strip-types scripts/stripe-setup.ts",
-    "test:db": "node supabase/tests/rls.test.mjs supabase/migrations/20261116000000_init.sql"
+    "test:db": "node supabase/tests/rls.test.mjs supabase/migrations/*.sql"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1169.0",

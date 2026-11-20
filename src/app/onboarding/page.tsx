@@ -18,7 +18,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
       <p className="text-sm font-semibold text-brand-500">{APP_NAME}</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight">Configura tu estudio</h1>
       <p className="mt-2 text-neutral-600">
-        Dos pasos: el nombre de tu negocio y tu plan. Después podrás invitar a tus clientes.
+        Dos pasos: el nombre de tu negocio y tu plan. Después crearás tus proyectos y agregarás a tus clientes.
       </p>
       {checkout === "canceled" ? (
         <p className="mt-6 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">

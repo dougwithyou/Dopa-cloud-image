@@ -38,7 +38,7 @@ export type ClientRow = {
 export type ProjectRow = {
   id: string;
   creator_id: string;
-  client_id: string;
+  client_id: string | null; // NULL hasta agregar un cliente al proyecto
   title: string;
   type: ProjectType;
   status: ProjectStatus;
@@ -110,7 +110,7 @@ export type Database = {
       };
       projects: {
         Row: ProjectRow;
-        Insert: Optional<ProjectRow, "id" | "status" | "created_at" | "updated_at">;
+        Insert: Optional<ProjectRow, "id" | "client_id" | "status" | "created_at" | "updated_at">;
         Update: Partial<ProjectRow>;
         Relationships: [
           {
