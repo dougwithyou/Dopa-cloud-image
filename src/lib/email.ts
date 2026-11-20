@@ -10,7 +10,7 @@ function resend(): Resend {
 }
 
 function fromAddress(): string {
-  return process.env.EMAIL_FROM || `${APP_NAME} <invite@cloud.hidopastudio.com>`;
+  return process.env.EMAIL_FROM || `${APP_NAME} <hola@cloud.hidopastudio.com>`;
 }
 
 function escapeHtml(value: string): string {

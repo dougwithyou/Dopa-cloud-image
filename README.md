@@ -138,7 +138,7 @@ stripe listen --forward-to localhost:3000/api/stripe/webhook \
      `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password`
    - Los correos de acceso de clientes **no** usan la plantilla de Supabase. Se generan con `auth.admin.generateLink` y se envían con Resend.
 7. *Authentication → SMTP Settings*: activa **Custom SMTP** con Resend para que los correos de Auth salgan de tu dominio:
-   host `smtp.resend.com`, puerto `465`, usuario `resend`, contraseña = tu `RESEND_API_KEY`, remitente `invite@cloud.hidopastudio.com`.
+   host `smtp.resend.com`, puerto `465`, usuario `resend`, contraseña = tu `RESEND_API_KEY`, remitente `hola@cloud.hidopastudio.com`.
 8. *Authentication → Providers → Email → Email OTP Expiration*: súbelo a `86400` (24 h). Ese valor es el que anuncia el correo de acceso del cliente.
 
 > Si cambias el esquema, regenera los tipos con `npx supabase gen types typescript --project-id <ref> > src/types/database.ts`.
@@ -210,7 +210,7 @@ Para probar los flujos usa la tarjeta `4242 4242 4242 4242`. Para adelantar el f
 2. Añade en el DNS de `hidopastudio.com` los registros que indica Resend (MX y TXT/SPF para `send.cloud`, y el DKIM `resend._domainkey.cloud`). Espera a que el dominio aparezca como **Verified**.
 3. Recomendado: un registro DMARC `_dmarc.cloud.hidopastudio.com` con `v=DMARC1; p=none;` para empezar.
 4. *API Keys → Create* (permiso *Sending access*, limitado al dominio) → `RESEND_API_KEY`.
-5. `EMAIL_FROM="Hi Dopa Cloud <invite@cloud.hidopastudio.com>"`.
+5. `EMAIL_FROM="Hi Dopa Cloud <hola@cloud.hidopastudio.com>"`.
 
 Correos que envía la app:
 
@@ -240,7 +240,7 @@ Correos que envía la app:
 ### Checklist después del despliegue
 
 - [ ] Registro → correo de confirmación → onboarding → Checkout (tarjeta 4242) → panel con «30 días de prueba».
-- [ ] Crear un proyecto → agregarle un cliente → publicarlo → al cliente le llega el correo desde `invite@cloud.hidopastudio.com` → crea su contraseña → `/portal`.
+- [ ] Crear un proyecto → agregarle un cliente → publicarlo → al cliente le llega el correo desde `hola@cloud.hidopastudio.com` → crea su contraseña → `/portal`.
 - [ ] Subir una foto y un video de más de 300 MB, publicar el proyecto y verlo en el portal del cliente. Probar descarga y copia de texto.
 - [ ] En *Developers → Webhooks* de Stripe, todos los eventos responden 200.
 - [ ] Con un segundo creador, comprobar que no ve nada del primero.
