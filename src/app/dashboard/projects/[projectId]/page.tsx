@@ -9,7 +9,8 @@ import { Uploader } from "@/components/uploader";
 import { SubmitButton } from "@/components/submit-button";
 import { AddClientToProjectForm } from "../../forms";
 import { deleteProject, removeClientFromProject, updateProjectStatus, updateProjectType } from "../../actions";
-import { PostCard, type EditorPost } from "./post-card";
+import { PostCard, type EditorAsset, type EditorPost } from "./post-card";
+import { MediaLibrary, type LibraryItem } from "./media-library";
 
 export const metadata = { title: "Proyecto" };
 
@@ -33,31 +34,57 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
       ? `Tu plan permite ${creator.client_limit} clientes. Elige uno existente o cambia de plan.`
       : undefined;
 
-  const { data: postRows } = await supabase
-    .from("posts")
-    .select("id, caption, position, created_at, assets(id, kind, r2_key, file_name, size_bytes, upload_status, position, created_at)")
-    .eq("project_id", project.id)
-    .order("position")
-    .order("created_at");
+  const [{ data: postRows }, { data: assetRows }] = await Promise.all([
+    supabase
+      .from("posts")
+      .select("id, caption, position, created_at")
+      .eq("project_id", project.id)
+      .order("position")
+      .order("created_at"),
+    supabase
+      .from("assets")
+      .select("id, post_id, kind, r2_key, file_name, size_bytes, upload_status, position, created_at")
+      .eq("project_id", project.id)
+      .order("created_at"),
+  ]);
 
-  const posts: EditorPost[] = await Promise.all(
-    (postRows ?? []).map(async (p) => ({
-      id: p.id,
-      caption: p.caption,
-      assets: await Promise.all(
-        [...(p.assets ?? [])]
-          .sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at))
-          .map(async (a) => ({
-            id: a.id,
-            kind: a.kind,
-            file_name: a.file_name,
-            size_bytes: a.size_bytes,
-            upload_status: a.upload_status,
-            url: a.upload_status === "complete" ? await signDownloadUrl(a.r2_key, { disposition: "inline" }) : null,
-          })),
-      ),
+  // URLs firmadas una sola vez por archivo.
+  const files = await Promise.all(
+    (assetRows ?? []).map(async (a) => ({
+      ...a,
+      url: a.upload_status === "complete" ? await signDownloadUrl(a.r2_key, { disposition: "inline" }) : null,
     })),
   );
+  const postNumber = new Map((postRows ?? []).map((p, i) => [p.id, i + 1]));
+
+  const posts: EditorPost[] = (postRows ?? []).map((p) => ({
+    id: p.id,
+    caption: p.caption,
+    assets: files
+      .filter((f) => f.post_id === p.id)
+      .sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at))
+      .map(
+        (f): EditorAsset => ({
+          id: f.id,
+          kind: f.kind,
+          file_name: f.file_name,
+          size_bytes: f.size_bytes,
+          upload_status: f.upload_status,
+          url: f.url,
+        }),
+      ),
+  }));
+
+  const library: LibraryItem[] = files.map((f) => ({
+    id: f.id,
+    kind: f.kind,
+    file_name: f.file_name,
+    size_bytes: f.size_bytes,
+    upload_status: f.upload_status,
+    url: f.url,
+    postNumber: f.post_id ? (postNumber.get(f.post_id) ?? null) : null,
+  }));
+  const isFeed = project.type === "monthly_content";
 
   const uploadBlocked = canUpload(creator)
     ? undefined
@@ -192,36 +219,51 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
         )}
       </section>
 
-      <section>
-        <h2 className="mb-1 font-semibold">Subir contenido</h2>
-        <p className="mb-3 text-sm text-neutral-500">
-          Elige si los archivos van como publicaciones separadas o juntos en un carrusel. Después escribe el copy de
-          cada publicación.
-        </p>
+      <section className="space-y-4">
+        <div>
+          <h2 className="font-semibold">1. Material del proyecto</h2>
+          <p className="text-sm text-neutral-500">
+            {isFeed
+              ? "Sube aquí todo el material. Después selecciona archivos para armar cada publicación o carrusel."
+              : "Sube aquí todas las fotos y videos de la sesión. Tu cliente verá la galería completa, en este orden."}
+          </p>
+        </div>
         <Uploader projectId={project.id} accept={ACCEPT_ATTRIBUTE} disabledReason={uploadBlocked} />
+        <MediaLibrary
+          projectId={project.id}
+          template={isFeed ? "feed" : "gallery"}
+          items={library}
+          posts={posts.map((p, i) => ({
+            id: p.id,
+            label: `Publicación ${i + 1}${p.assets.length > 1 ? ` (carrusel · ${p.assets.length})` : ""}`,
+          }))}
+        />
       </section>
 
-      <section>
-        <h2 className="mb-3 font-semibold">Publicaciones ({posts.length})</h2>
-        {posts.length === 0 ? (
-          <div className="card p-8 text-center text-sm text-neutral-500">
-            Aún no hay publicaciones. Sube fotos o videos para crear la primera.
-          </div>
-        ) : (
-          <ul className="space-y-4">
-            {posts.map((post, i) => (
-              <PostCard
-                key={post.id}
-                post={post}
-                index={i}
-                total={posts.length}
-                projectId={project.id}
-                uploadBlocked={uploadBlocked}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
+      {isFeed ? (
+        <section>
+          <h2 className="font-semibold">2. Publicaciones ({posts.length})</h2>
+          <p className="mb-3 text-sm text-neutral-500">
+            Así se verán en el feed de tu cliente, en este orden. Escribe el copy de cada una.
+          </p>
+          {posts.length === 0 ? (
+            <div className="card p-8 text-center text-sm text-neutral-500">
+              Aún no hay publicaciones. Selecciona archivos en el material y pulsa “Crear publicación”.
+            </div>
+          ) : (
+            <ul className="space-y-4">
+              {posts.map((post, i) => (
+                <PostCard key={post.id} post={post} index={i} total={posts.length} />
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : posts.length > 0 ? (
+        <p className="rounded-xl bg-neutral-50 p-4 text-sm text-neutral-600">
+          Este proyecto usa la plantilla <strong>Galería de fotos</strong>: tu cliente ve todo el material, sin
+          publicaciones. Si cambias a <strong>Feed de Instagram</strong>, tus {posts.length} publicaciones siguen guardadas.
+        </p>
+      ) : null}
 
       <section className="border-t border-neutral-200 pt-6">
         <form action={deleteProject}>

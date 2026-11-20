@@ -183,7 +183,7 @@ await as(U.creatorA, async () => {
     "Creador A no puede llamar reserve_asset_upload",
     /permission denied/.test(
       await fails(
-        `select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${postA1}','photo','kx','x.jpg','image/jpeg',1)`,
+        `select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${pA1pub}','photo','kx','x.jpg','image/jpeg',1)`,
       ),
     ),
   );
@@ -319,12 +319,12 @@ await db.exec(`set role service_role;`);
 check(
   "reserve: bloquea con suscripción cancelada",
   /subscription_inactive/.test(
-    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${postA1}','photo','r1','x.jpg','image/jpeg',10)`),
+    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${pA1pub}','photo','r1','x.jpg','image/jpeg',10)`),
   ),
 );
 await db.exec(`reset role; update public.creators set subscription_status = 'active', portal_access_until = null where id = '${cA}'; set role service_role;`);
 const ok = await db.query(
-  `select * from public.reserve_asset_upload(gen_random_uuid(),'${cA}','${postA1}','photo','r2','x.jpg','image/jpeg',1000)`,
+  `select * from public.reserve_asset_upload(gen_random_uuid(),'${cA}','${pA1pub}','photo','r2','x.jpg','image/jpeg',1000,'${postA1}')`,
 );
 check(
   "reserve: crea archivo pending al final del carrusel",
@@ -334,20 +334,26 @@ check(
 check(
   "reserve: bloquea al superar storage_limit_bytes",
   /storage_limit_exceeded/.test(
-    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${postA1}','video','r3','x.mp4','video/mp4',${GB})`),
+    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${pA1pub}','video','r3','x.mp4','video/mp4',${GB})`),
+  ),
+);
+check(
+  "reserve: bloquea proyecto de otro creador",
+  /project_not_found/.test(
+    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${pB1}','photo','r4','x.jpg','image/jpeg',1)`),
   ),
 );
 check(
   "reserve: bloquea publicación de otro creador",
   /post_not_found/.test(
-    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${postB}','photo','r4','x.jpg','image/jpeg',1)`),
+    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${pA1pub}','photo','r4b','x.jpg','image/jpeg',1,'${postB}')`),
   ),
 );
 await db.exec(`reset role; update public.creators set client_limit = 1 where id = '${cA}'; set role service_role;`);
 check(
   "reserve: bloquea si el creador excede client_limit (tras bajar de plan)",
   /client_limit_exceeded/.test(
-    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${postA1}','photo','r5','x.jpg','image/jpeg',1)`),
+    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${pA1pub}','photo','r5','x.jpg','image/jpeg',1)`),
   ),
 );
 await db.exec(`reset role;`);
@@ -364,7 +370,7 @@ await db.exec(`set role service_role;`);
 check(
   "reserve: bloquea el elemento 21 de un carrusel",
   /carousel_limit_exceeded/.test(
-    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${fullPost}','photo','r6','x.jpg','image/jpeg',1)`),
+    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${pA1pub}','photo','r6','x.jpg','image/jpeg',1,'${fullPost}')`),
   ),
 );
 await db.exec(`reset role;`);
@@ -384,8 +390,48 @@ check(
 );
 // Borrar la publicación borra sus archivos.
 await db.exec(`delete from public.posts where id = '${fullPost}'`);
-const left = await db.query(`select count(*)::int n from public.assets where post_id = '${fullPost}'`);
-check("Borrar una publicación borra sus archivos", left.rows[0].n === 0);
+const back = await db.query(`select count(*)::int n from public.assets where r2_key like 'full-%' and post_id is null`);
+check("Eliminar una publicación devuelve sus archivos a la biblioteca", back.rows[0].n === 20, JSON.stringify(back.rows));
+
+// ---------- Biblioteca: subir sin publicación y armar publicaciones ----------
+await db.exec(`set role service_role;`);
+const lib = await db.query(
+  `select * from public.reserve_asset_upload(gen_random_uuid(),'${cA}','${pA1pub}','photo','lib1','l.jpg','image/jpeg',1)`,
+);
+check("reserve: sube a la biblioteca sin publicación", lib.rows[0]?.post_id === null);
+await db.exec(`reset role; update public.assets set upload_status = 'complete' where r2_key = 'lib1';`);
+const libId = lib.rows[0].id;
+
+await as(U.creatorA, async () => {
+  const p = await db.query(`insert into public.posts (creator_id, project_id, caption) values ('${cA}','${pA1pub}','Nuevo') returning id`);
+  const newPost = p.rows[0].id;
+  const assigned = await db.query(`update public.assets set post_id = '${newPost}', position = 0 where id = '${libId}' returning post_id`);
+  check("Creador puede asignar un archivo de la biblioteca a una publicación", assigned.rows[0]?.post_id === newPost);
+  check(
+    "No se puede asignar un archivo a una publicación de otro proyecto",
+    (await fails(`update public.assets set post_id = '${postB}' where id = '${libId}'`)) !== null,
+  );
+  await db.query(`update public.assets set post_id = null where id = '${libId}'`);
+  check(
+    "Trigger: no se pueden asignar más de 20 archivos a un carrusel",
+    /carousel_limit_exceeded/.test(
+      await fails(`update public.assets set post_id = '${newPost}' where r2_key like 'full-%' or id = '${libId}'`),
+    ),
+  );
+  await db.query(`delete from public.posts where id = '${newPost}'`);
+});
+
+// El cliente no ve la biblioteca en un feed; sí en una galería de fotos.
+await as(U.clientA1, async () => {
+  const r = await db.query(`select id from public.assets where id = '${libId}'`);
+  check("Cliente (feed) no ve archivos de la biblioteca sin publicar", r.rows.length === 0);
+});
+await db.exec(`update public.projects set type = 'photo_session' where id = '${pA1pub}'`);
+await as(U.clientA1, async () => {
+  const r = await db.query(`select id from public.assets where id = '${libId}'`);
+  check("Cliente (galería) ve toda la biblioteca", r.rows.length === 1);
+});
+await db.exec(`update public.projects set type = 'monthly_content' where id = '${pA1pub}'`);
 
 console.log(failures === 0 ? "\nTODAS LAS PRUEBAS PASARON" : `\n${failures} PRUEBAS FALLARON`);
 process.exit(failures === 0 ? 0 : 1);

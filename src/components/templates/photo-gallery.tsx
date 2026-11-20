@@ -14,7 +14,7 @@ function useColumnCount() {
   return count;
 }
 import { DownloadAllButton } from "@/components/download-all-button";
-import { downloadHref, type FeedMedia, type FeedPostData } from "@/components/feed-post";
+import { downloadHref, type FeedMedia } from "@/components/feed-post";
 import { pad, slugify, type ZipEntry } from "@/lib/zip-download";
 
 function DownloadIcon() {
@@ -129,14 +129,13 @@ export function PhotoGalleryTemplate({
   title,
   authorName,
   date,
-  posts,
+  items,
 }: {
   title: string;
   authorName: string;
   date: string;
-  posts: FeedPostData[];
+  items: FeedMedia[];
 }) {
-  const items = posts.flatMap((p) => p.media);
   const [open, setOpen] = useState<number | null>(null);
   const columnCount = useColumnCount();
   // Reparto en columnas de izquierda a derecha (1, 2, 3, 4 en la primera fila),

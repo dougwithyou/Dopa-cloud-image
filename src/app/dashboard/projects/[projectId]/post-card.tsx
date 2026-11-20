@@ -1,9 +1,6 @@
 import { formatBytes } from "@/lib/format";
-import { MAX_CAROUSEL_ITEMS } from "@/lib/constants";
-import { ACCEPT_ATTRIBUTE } from "@/lib/upload-rules";
-import { Uploader } from "@/components/uploader";
 import { SubmitButton } from "@/components/submit-button";
-import { deleteAsset, deletePost, moveAsset, movePost, updatePostCaption } from "../../actions";
+import { deletePost, moveAsset, movePost, removeAssetFromPost, updatePostCaption } from "../../actions";
 
 export interface EditorAsset {
   id: string;
@@ -37,19 +34,7 @@ function Media({ asset, className }: { asset: EditorAsset; className: string }) 
 }
 
 /** Tarjeta de una publicación en el panel: archivos, copy y acciones. */
-export function PostCard({
-  post,
-  index,
-  total,
-  projectId,
-  uploadBlocked,
-}: {
-  post: EditorPost;
-  index: number;
-  total: number;
-  projectId: string;
-  uploadBlocked?: string;
-}) {
+export function PostCard({ post, index, total }: { post: EditorPost; index: number; total: number }) {
   const count = post.assets.length;
   const isCarousel = count > 1;
   const label = count === 0 ? "Sin archivos" : isCarousel ? `Carrusel · ${count} archivos` : post.assets[0].kind === "video" ? "Video" : "Foto";
@@ -77,7 +62,7 @@ export function PostCard({
             <SubmitButton
               className="btn-ghost px-2 py-1 text-xs text-red-600"
               pendingLabel="…"
-              confirm={`¿Eliminar la publicación ${index + 1}${count > 0 ? ` y sus ${count} archivo(s)` : ""}? No se puede deshacer.`}
+              confirm={`¿Eliminar la publicación ${index + 1}? ${count > 0 ? "Sus archivos vuelven a la biblioteca; " : ""}el copy se pierde.`}
             >
               Eliminar
             </SubmitButton>
@@ -111,13 +96,9 @@ export function PostCard({
                       <input type="hidden" name="direction" value="left" />
                       <button className="btn-ghost px-1.5 py-0.5 text-xs" disabled={i === 0} aria-label="Mover a la izquierda">←</button>
                     </form>
-                    <form action={deleteAsset}>
+                    <form action={removeAssetFromPost}>
                       <input type="hidden" name="assetId" value={asset.id} />
-                      <SubmitButton
-                        className="btn-ghost px-1.5 py-0.5 text-xs text-red-600"
-                        pendingLabel="…"
-                        confirm="¿Quitar este archivo del carrusel? Se elimina definitivamente."
-                      >
+                      <SubmitButton className="btn-ghost px-1.5 py-0.5 text-xs" pendingLabel="…">
                         Quitar
                       </SubmitButton>
                     </form>
@@ -134,17 +115,9 @@ export function PostCard({
             <p className="rounded-xl bg-neutral-50 p-4 text-sm text-neutral-500">Esta publicación aún no tiene archivos.</p>
           )}
 
-          {count < MAX_CAROUSEL_ITEMS ? (
-            <Uploader
-              projectId={projectId}
-              accept={ACCEPT_ATTRIBUTE}
-              disabledReason={uploadBlocked}
-              targetPostId={post.id}
-              remainingSlots={MAX_CAROUSEL_ITEMS - count}
-            />
-          ) : (
-            <p className="text-xs text-neutral-500">Carrusel completo ({MAX_CAROUSEL_ITEMS} de {MAX_CAROUSEL_ITEMS}).</p>
-          )}
+          {count > 1 ? (
+            <p className="text-xs text-neutral-500">“Quitar” devuelve el archivo a la biblioteca sin borrarlo.</p>
+          ) : null}
         </div>
 
         {/* Copy */}

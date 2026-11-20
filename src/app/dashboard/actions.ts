@@ -345,7 +345,7 @@ export async function moveAsset(formData: FormData): Promise<void> {
     .eq("id", id)
     .eq("creator_id", creator.id)
     .single();
-  if (!asset) return;
+  if (!asset?.post_id) return;
 
   const { data: all } = await supabase
     .from("assets")
@@ -379,50 +379,173 @@ async function swapAndRenumber(
   );
 }
 
-/** Quita un archivo de su publicación. Si era el último, se borra la publicación. */
-export async function deleteAsset(formData: FormData): Promise<void> {
+// ---------------------------------------------------------------------------
+// Biblioteca: armar publicaciones con archivos ya subidos
+// ---------------------------------------------------------------------------
+
+const MAX_CAROUSEL = 20;
+const AssetIds = z.array(Id).min(1, "Selecciona al menos un archivo").max(200);
+
+/**
+ * Crea una publicación con archivos de la biblioteca, en el orden en que se
+ * seleccionaron: 1 archivo = foto o video individual, 2-20 = carrusel.
+ */
+export async function createPostFromAssets(input: {
+  projectId: string;
+  assetIds: string[];
+  caption?: string;
+}): Promise<ActionState> {
+  const { supabase, creator } = await ctxOrThrow();
+  const projectId = Id.safeParse(input.projectId);
+  const assetIds = AssetIds.safeParse(input.assetIds);
+  if (!projectId.success || !assetIds.success) return { error: "Selecciona al menos un archivo" };
+  if (assetIds.data.length > MAX_CAROUSEL) return { error: `Un carrusel admite como máximo ${MAX_CAROUSEL} archivos.` };
+  const caption = z.string().max(10_000).parse(input.caption ?? "").trim();
+
+  // Solo archivos propios, completos y libres (RLS + filtros).
+  const { data: files } = await supabase
+    .from("assets")
+    .select("id")
+    .in("id", assetIds.data)
+    .eq("project_id", projectId.data)
+    .eq("creator_id", creator.id)
+    .eq("upload_status", "complete")
+    .is("post_id", null);
+  if (!files || files.length !== assetIds.data.length) {
+    return { error: "Algunos archivos ya están en otra publicación o no existen. Recarga la página." };
+  }
+
+  const { data: last } = await supabase
+    .from("posts")
+    .select("position")
+    .eq("project_id", projectId.data)
+    .order("position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: post, error } = await supabase
+    .from("posts")
+    .insert({
+      creator_id: creator.id,
+      project_id: projectId.data,
+      caption: caption || null,
+      position: (last?.position ?? -1) + 1,
+    })
+    .select("id")
+    .single();
+  if (error || !post) return { error: "No se pudo crear la publicación" };
+
+  const results = await Promise.all(
+    assetIds.data.map((id, position) =>
+      supabase.from("assets").update({ post_id: post.id, position }).eq("id", id).eq("creator_id", creator.id),
+    ),
+  );
+  if (results.some((r) => r.error)) {
+    // Deshacer: los archivos vuelven a la biblioteca.
+    await supabase.from("posts").delete().eq("id", post.id);
+    return { error: "No se pudo crear la publicación" };
+  }
+
+  revalidatePath(`/dashboard/projects/${projectId.data}`);
+  const n = assetIds.data.length;
+  return { message: n === 1 ? "Publicación creada." : `Carrusel de ${n} archivos creado.` };
+}
+
+/** Añade archivos de la biblioteca al final de una publicación existente. */
+export async function addAssetsToPost(input: { postId: string; assetIds: string[] }): Promise<ActionState> {
+  const { supabase, creator } = await ctxOrThrow();
+  const postId = Id.safeParse(input.postId);
+  const assetIds = AssetIds.safeParse(input.assetIds);
+  if (!postId.success || !assetIds.success) return { error: "Selecciona al menos un archivo" };
+
+  const { data: post } = await supabase
+    .from("posts")
+    .select("id, project_id")
+    .eq("id", postId.data)
+    .eq("creator_id", creator.id)
+    .maybeSingle();
+  if (!post) return { error: "Publicación no encontrada" };
+
+  const { data: current } = await supabase.from("assets").select("position").eq("post_id", post.id);
+  const count = current?.length ?? 0;
+  if (count + assetIds.data.length > MAX_CAROUSEL) {
+    return { error: `Esa publicación tiene ${count} archivos; un carrusel admite como máximo ${MAX_CAROUSEL}.` };
+  }
+  const start = (current ?? []).reduce((m, a) => Math.max(m, a.position), -1) + 1;
+
+  const results = await Promise.all(
+    assetIds.data.map((id, i) =>
+      supabase
+        .from("assets")
+        .update({ post_id: post.id, position: start + i })
+        .eq("id", id)
+        .eq("project_id", post.project_id)
+        .eq("creator_id", creator.id)
+        .is("post_id", null),
+    ),
+  );
+  revalidatePath(`/dashboard/projects/${post.project_id}`);
+  const failed = results.filter((r) => r.error).length;
+  return failed
+    ? { error: limitErrorFromDb(results.find((r) => r.error)?.error?.message)?.message ?? "Algunos archivos no se pudieron añadir." }
+    : { message: `Añadidos ${assetIds.data.length} archivo(s) a la publicación.` };
+}
+
+/** Quita un archivo de su publicación y lo devuelve a la biblioteca (no lo borra). */
+export async function removeAssetFromPost(formData: FormData): Promise<void> {
   const { supabase, creator } = await ctxOrThrow();
   const id = Id.parse(formData.get("assetId"));
   const { data: asset } = await supabase
     .from("assets")
-    .select("id, post_id, project_id, r2_key, r2_upload_id, upload_status")
+    .select("id, post_id, project_id")
     .eq("id", id)
     .eq("creator_id", creator.id)
     .single();
-  if (!asset) return;
+  if (!asset?.post_id) return;
 
-  await removeFilesFromR2([asset]);
-  await supabase.from("assets").delete().eq("id", asset.id);
+  await supabase.from("assets").update({ post_id: null, position: 0 }).eq("id", asset.id);
 
+  // Si la publicación queda vacía y sin copy, se elimina.
   const { count } = await supabase
     .from("assets")
     .select("id", { count: "exact", head: true })
     .eq("post_id", asset.post_id);
   if ((count ?? 0) === 0) {
     const { data: post } = await supabase.from("posts").select("caption").eq("id", asset.post_id).maybeSingle();
-    // Se conserva si tiene copy escrito, para no perder el texto.
     if (post && !post.caption) await supabase.from("posts").delete().eq("id", asset.post_id);
   }
   revalidatePath(`/dashboard/projects/${asset.project_id}`);
 }
 
-/** Borra una publicación completa: su copy y todos sus archivos. */
+/** Elimina una publicación. Sus archivos vuelven a la biblioteca. */
 export async function deletePost(formData: FormData): Promise<void> {
   const { supabase, creator } = await ctxOrThrow();
   const id = Id.parse(formData.get("postId"));
   const { data: post } = await supabase
     .from("posts")
-    .select("id, project_id")
+    .delete()
     .eq("id", id)
     .eq("creator_id", creator.id)
-    .single();
-  if (!post) return;
+    .select("project_id")
+    .maybeSingle();
+  if (post) revalidatePath(`/dashboard/projects/${post.project_id}`);
+}
+
+/** Elimina archivos definitivamente (base de datos y R2). */
+export async function deleteAssets(input: { assetIds: string[] }): Promise<ActionState> {
+  const { supabase, creator } = await ctxOrThrow();
+  const assetIds = AssetIds.safeParse(input.assetIds);
+  if (!assetIds.success) return { error: "Selecciona al menos un archivo" };
 
   const { data: files } = await supabase
     .from("assets")
-    .select("r2_key, r2_upload_id, upload_status")
-    .eq("post_id", post.id);
-  await removeFilesFromR2(files ?? []);
-  await supabase.from("posts").delete().eq("id", post.id); // borra los assets en cascada
-  revalidatePath(`/dashboard/projects/${post.project_id}`);
+    .select("id, project_id, r2_key, r2_upload_id, upload_status")
+    .in("id", assetIds.data)
+    .eq("creator_id", creator.id);
+  if (!files || files.length === 0) return { error: "Archivos no encontrados" };
+
+  await removeFilesFromR2(files);
+  await supabase.from("assets").delete().in("id", files.map((f) => f.id)).eq("creator_id", creator.id);
+  revalidatePath(`/dashboard/projects/${files[0].project_id}`);
+  return { message: `${files.length} archivo(s) eliminado(s).` };
 }

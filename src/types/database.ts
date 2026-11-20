@@ -60,7 +60,7 @@ export type PostRow = {
 export type AssetRow = {
   id: string;
   project_id: string;
-  post_id: string;
+  post_id: string | null; // NULL = en la biblioteca del proyecto, sin usar
   creator_id: string;
   kind: AssetKind;
   r2_key: string;
@@ -151,7 +151,7 @@ export type Database = {
         Row: AssetRow;
         Insert: Optional<
           AssetRow,
-          "id" | "r2_upload_id" | "size_bytes" | "upload_status" | "position" | "created_at" | "completed_at"
+          "id" | "post_id" | "r2_upload_id" | "size_bytes" | "upload_status" | "position" | "created_at" | "completed_at"
         >;
         Update: Partial<AssetRow>;
         Relationships: [
@@ -192,12 +192,13 @@ export type Database = {
         Args: {
           p_asset_id: string;
           p_creator_id: string;
-          p_post_id: string;
+          p_project_id: string;
           p_kind: AssetKind;
           p_r2_key: string;
           p_file_name: string;
           p_mime_type: string;
           p_size_bytes: number;
+          p_post_id?: string | null;
         };
         Returns: AssetRow;
       };

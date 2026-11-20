@@ -21,11 +21,11 @@ export default async function PortalProjectPage({ params }: { params: Promise<{ 
     .maybeSingle();
   if (!project) notFound();
 
-  const [posts, { data: creators }] = await Promise.all([
+  const [content, { data: creators }] = await Promise.all([
     loadProjectContent(supabase, project.id),
     supabase.rpc("my_creators"),
   ]);
   const authorName = (creators ?? []).find((c) => c.id === project.creator_id)?.business_name ?? "Tu creador";
 
-  return <ProjectView project={project} authorName={authorName} posts={posts} />;
+  return <ProjectView project={project} authorName={authorName} posts={content.posts} library={content.library} />;
 }

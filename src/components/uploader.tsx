@@ -3,15 +3,10 @@
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatBytes } from "@/lib/format";
-import { MAX_CAROUSEL_ITEMS } from "@/lib/constants";
 
 // Subida multipart directa del navegador a R2. Next.js solo firma las partes:
-// los bytes nunca pasan por Vercel.
-//
-// Cada archivo pertenece a una publicación:
-//  - "separate": se crea una publicación por archivo.
-//  - "carousel": se crea UNA publicación para todos los archivos (máx. 20).
-//  - targetPostId: se agregan a una publicación existente (completar un carrusel).
+// los bytes nunca pasan por Vercel. Los archivos entran en la biblioteca del
+// proyecto; las publicaciones se arman después eligiendo de la biblioteca.
 
 const CONCURRENCY_FILES = 2;
 const CONCURRENCY_PARTS = 4;
@@ -39,7 +34,6 @@ function mimeFor(file: File): string {
   return EXT_MIME[ext] ?? "application/octet-stream";
 }
 
-type Mode = "separate" | "carousel";
 type ItemState = "queued" | "uploading" | "done" | "error" | "canceled";
 
 interface Item {
@@ -87,10 +81,10 @@ function putPart(url: string, blob: Blob, onProgress: (loaded: number) => void, 
 }
 
 /** Reserva el archivo en el servidor (crea el asset 'pending' y el multipart en R2). */
-function startUpload(postId: string, file: File, signal: AbortSignal) {
+function startUpload(projectId: string, file: File, signal: AbortSignal) {
   return postJson<{ assetId: string; partSize: number; partCount: number }>(
     "/api/uploads",
-    { postId, fileName: file.name, mimeType: mimeFor(file), size: file.size },
+    { projectId, fileName: file.name, mimeType: mimeFor(file), size: file.size },
     signal,
   );
 }
@@ -178,21 +172,13 @@ export function Uploader({
   projectId,
   accept,
   disabledReason,
-  targetPostId,
-  remainingSlots,
 }: {
   projectId: string;
   accept: string;
   disabledReason?: string;
-  /** Si se indica, los archivos se agregan a esta publicación (carrusel existente). */
-  targetPostId?: string;
-  /** Espacios libres en el carrusel destino (20 - archivos actuales). */
-  remainingSlots?: number;
 }) {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("separate");
   const [items, setItems] = useState<Item[]>([]);
-  const [notice, setNotice] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const controllers = useRef(new Map<string, AbortController>());
   const inputRef = useRef<HTMLInputElement>(null);
@@ -203,46 +189,11 @@ export function Uploader({
   const start = useCallback(
     async (files: File[]) => {
       if (disabledReason || files.length === 0) return;
-      setNotice(null);
-
-      const asCarousel = Boolean(targetPostId) || mode === "carousel";
-      const limit = targetPostId ? (remainingSlots ?? MAX_CAROUSEL_ITEMS) : MAX_CAROUSEL_ITEMS;
-      if (asCarousel && files.length > limit) {
-        setNotice(
-          targetPostId
-            ? `Este carrusel admite ${limit} archivo(s) más (máximo ${MAX_CAROUSEL_ITEMS}).`
-            : `Un carrusel admite como máximo ${MAX_CAROUSEL_ITEMS} archivos. Seleccionaste ${files.length}.`,
-        );
-        return;
-      }
-
       const newItems: Item[] = files.map((file) => ({ id: crypto.randomUUID(), file, progress: 0, state: "queued" }));
       setItems((prev) => [...newItems, ...prev]);
 
-      // 1) Publicaciones: una por archivo, una para todo el carrusel, o la existente.
-      const postFor = new Map<string, string>();
-      const createdPosts = new Set<string>();
-      try {
-        if (targetPostId) {
-          newItems.forEach((it) => postFor.set(it.id, targetPostId));
-        } else if (mode === "carousel") {
-          const { postId } = await postJson<{ postId: string }>("/api/posts", { projectId });
-          createdPosts.add(postId);
-          newItems.forEach((it) => postFor.set(it.id, postId));
-        } else {
-          for (const it of newItems) {
-            const { postId } = await postJson<{ postId: string }>("/api/posts", { projectId });
-            createdPosts.add(postId);
-            postFor.set(it.id, postId);
-          }
-        }
-      } catch (err) {
-        newItems.forEach((it) => update(it.id, { state: "error", error: (err as Error).message }));
-        return;
-      }
-
-      // 2) Reservas en orden (así el carrusel respeta el orden de selección) y
-      //    transferencias en paralelo.
+      // Las reservas se hacen en orden (la biblioteca respeta el orden de
+      // selección) y las transferencias en paralelo.
       let reserveChain: Promise<unknown> = Promise.resolve();
       const reserveInOrder = <T,>(fn: () => Promise<T>) => {
         const next = reserveChain.then(fn, fn);
@@ -253,15 +204,12 @@ export function Uploader({
         newItems.map((it) => {
           const controller = new AbortController();
           controllers.current.set(it.id, controller);
-          return [
-            it.id,
-            reserveInOrder(() => startUpload(postFor.get(it.id)!, it.file, controller.signal)),
-          ] as const;
+          return [it.id, reserveInOrder(() => startUpload(projectId, it.file, controller.signal))] as const;
         }),
       );
 
-      const succeededPosts = new Set<string>();
       const pending = [...newItems];
+      let finished = 0;
       const run = async () => {
         while (pending.length > 0) {
           const item = pending.shift()!;
@@ -271,66 +219,31 @@ export function Uploader({
             const started = await reservations.get(item.id)!;
             await transfer(started, item.file, (p) => update(item.id, { progress: p }), controller.signal);
             update(item.id, { state: "done", progress: 1 });
-            succeededPosts.add(postFor.get(item.id)!);
           } catch (err) {
             const canceled = (err as Error).name === "AbortError";
             update(item.id, { state: canceled ? "canceled" : "error", error: (err as Error).message });
           } finally {
             controllers.current.delete(item.id);
+            // Refresca la biblioteca cada pocos archivos para ver el avance.
+            if (++finished % 5 === 0) router.refresh();
           }
         }
       };
       await Promise.all(Array.from({ length: CONCURRENCY_FILES }, run));
-
-      // 3) Publicaciones nuevas que quedaron sin ningún archivo: se eliminan.
-      await Promise.all(
-        [...createdPosts]
-          .filter((id) => !succeededPosts.has(id))
-          .map((id) => fetch(`/api/posts/${id}`, { method: "DELETE" }).catch(() => undefined)),
-      );
       router.refresh();
     },
-    [disabledReason, mode, projectId, remainingSlots, router, targetPostId],
+    [disabledReason, projectId, router],
   );
 
   if (disabledReason) {
     return <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">{disabledReason}</div>;
   }
 
-  const compact = Boolean(targetPostId);
+  const active = items.filter((i) => i.state === "uploading" || i.state === "queued").length;
+  const done = items.filter((i) => i.state === "done").length;
 
   return (
     <div>
-      {!targetPostId ? (
-        <fieldset className="mb-3 grid gap-2 sm:grid-cols-2">
-          <legend className="sr-only">Cómo agrupar los archivos</legend>
-          {(
-            [
-              ["separate", "Publicaciones separadas", "Cada archivo es su propia publicación, con su propio copy."],
-              ["carousel", "Carrusel", `Todos los archivos van juntos en una publicación con un solo copy (máx. ${MAX_CAROUSEL_ITEMS}).`],
-            ] as const
-          ).map(([value, title, help]) => (
-            <label
-              key={value}
-              className="card flex cursor-pointer gap-3 p-3 transition has-[:checked]:border-neutral-900 has-[:checked]:ring-2 has-[:checked]:ring-neutral-900/10"
-            >
-              <input
-                type="radio"
-                name="upload-mode"
-                value={value}
-                checked={mode === value}
-                onChange={() => setMode(value)}
-                className="mt-1"
-              />
-              <span>
-                <span className="block text-sm font-semibold">{title}</span>
-                <span className="block text-xs text-neutral-500">{help}</span>
-              </span>
-            </label>
-          ))}
-        </fieldset>
-      ) : null}
-
       <div
         role="button"
         tabIndex={0}
@@ -346,23 +259,12 @@ export function Uploader({
           setDragging(false);
           void start(Array.from(e.dataTransfer.files));
         }}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 text-center transition ${
-          compact ? "py-4" : "py-10"
-        } ${dragging ? "border-brand-500 bg-brand-50" : "border-neutral-300 bg-white hover:border-neutral-400"}`}
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-8 text-center transition ${
+          dragging ? "border-brand-500 bg-brand-50" : "border-neutral-300 bg-white hover:border-neutral-400"
+        }`}
       >
-        <p className="text-sm font-semibold">
-          {targetPostId
-            ? "+ Añadir fotos o videos a este carrusel"
-            : mode === "carousel"
-              ? "Arrastra aquí las fotos y videos del carrusel"
-              : "Arrastra aquí fotos y videos"}
-        </p>
-        {!compact ? (
-          <p className="mt-1 text-sm text-neutral-500">
-            o haz clic para elegirlos · JPG, PNG, HEIC, WEBP, MP4, MOV, WEBM
-            {mode === "carousel" ? " · se respetará el orden en que los selecciones" : ""}
-          </p>
-        ) : null}
+        <p className="text-sm font-semibold">Arrastra aquí todo el material: fotos y videos</p>
+        <p className="mt-1 text-sm text-neutral-500">o haz clic para elegirlos · JPG, PNG, HEIC, WEBP, MP4, MOV, WEBM</p>
         <input
           ref={inputRef}
           type="file"
@@ -376,45 +278,48 @@ export function Uploader({
         />
       </div>
 
-      {notice ? <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{notice}</p> : null}
-
       {items.length > 0 ? (
-        <ul className="mt-4 space-y-2">
-          {items.map((item) => (
-            <li key={item.id} className="card p-3">
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="truncate font-medium">{item.file.name}</span>
-                <span className="shrink-0 text-xs text-neutral-500">
-                  {item.state === "done"
-                    ? "Listo"
-                    : item.state === "error"
-                      ? "Error"
-                      : item.state === "canceled"
-                        ? "Cancelado"
-                        : item.state === "queued"
-                          ? "En cola"
-                          : `${Math.floor(item.progress * 100)}% de ${formatBytes(item.file.size)}`}
-                </span>
-                {item.state === "uploading" || item.state === "queued" ? (
-                  <button
-                    type="button"
-                    className="shrink-0 text-xs text-red-600 hover:underline"
-                    onClick={() => controllers.current.get(item.id)?.abort()}
-                  >
-                    Cancelar
-                  </button>
-                ) : null}
-              </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-100">
-                <div
-                  className={`h-full transition-all ${item.state === "error" ? "bg-red-500" : item.state === "done" ? "bg-green-500" : "bg-neutral-900"}`}
-                  style={{ width: `${Math.round(item.progress * 100)}%` }}
-                />
-              </div>
-              {item.error && item.state === "error" ? <p className="mt-1 text-xs text-red-600">{item.error}</p> : null}
-            </li>
-          ))}
-        </ul>
+        <details className="mt-3" open={active > 0}>
+          <summary className="cursor-pointer text-sm text-neutral-600">
+            {active > 0 ? `Subiendo… ${done} de ${items.length} listos` : `Subidas: ${done} de ${items.length} listas`}
+          </summary>
+          <ul className="mt-2 max-h-72 space-y-2 overflow-y-auto">
+            {items.map((item) => (
+              <li key={item.id} className="card p-3">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="truncate font-medium">{item.file.name}</span>
+                  <span className="shrink-0 text-xs text-neutral-500">
+                    {item.state === "done"
+                      ? "Listo"
+                      : item.state === "error"
+                        ? "Error"
+                        : item.state === "canceled"
+                          ? "Cancelado"
+                          : item.state === "queued"
+                            ? "En cola"
+                            : `${Math.floor(item.progress * 100)}% de ${formatBytes(item.file.size)}`}
+                  </span>
+                  {item.state === "uploading" || item.state === "queued" ? (
+                    <button
+                      type="button"
+                      className="shrink-0 text-xs text-red-600 hover:underline"
+                      onClick={() => controllers.current.get(item.id)?.abort()}
+                    >
+                      Cancelar
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-100">
+                  <div
+                    className={`h-full transition-all ${item.state === "error" ? "bg-red-500" : item.state === "done" ? "bg-green-500" : "bg-neutral-900"}`}
+                    style={{ width: `${Math.round(item.progress * 100)}%` }}
+                  />
+                </div>
+                {item.error && item.state === "error" ? <p className="mt-1 text-xs text-red-600">{item.error}</p> : null}
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : null}
     </div>
   );

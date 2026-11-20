@@ -23,7 +23,7 @@ export default async function PreviewPage({ params }: { params: Promise<{ projec
     .maybeSingle();
   if (!project) notFound();
 
-  const posts = await loadProjectContent(supabase, project.id);
+  const content = await loadProjectContent(supabase, project.id);
 
   return (
     <div className="min-h-dvh bg-white">
@@ -38,7 +38,7 @@ export default async function PreviewPage({ params }: { params: Promise<{ projec
           </Link>
         </div>
       </div>
-      <ProjectView project={project} authorName={creator.business_name} posts={posts} />
+      <ProjectView project={project} authorName={creator.business_name} posts={content.posts} library={content.library} />
     </div>
   );
 }
