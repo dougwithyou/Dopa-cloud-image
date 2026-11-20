@@ -10,7 +10,7 @@ import { checkUploadLimits, limitErrorFromDb } from "@/lib/limits";
 export const dynamic = "force-dynamic";
 
 const Body = z.object({
-  projectId: z.uuid(),
+  postId: z.uuid(),
   fileName: z.string().trim().min(1).max(255),
   mimeType: z.string().trim().min(1).max(100),
   size: z.number().int().positive(),
@@ -20,7 +20,8 @@ const Body = z.object({
  * Inicia una subida multipart:
  *  1. valida MIME, extensión y tamaño máximo,
  *  2. verifica suscripción, almacenamiento y número de clientes,
- *  3. reserva el espacio y crea el asset 'pending' (atómico en Postgres),
+ *  3. reserva el espacio y crea el archivo 'pending' dentro de la publicación
+ *     (atómico en Postgres; máx. 20 por carrusel),
  *  4. crea el multipart upload en R2.
  * El navegador recibe solo el id del asset y el plan de partes.
  */
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Solicitud inválida" }, { status: 400 });
-  const { projectId, fileName, mimeType, size } = parsed.data;
+  const { postId, fileName, mimeType, size } = parsed.data;
 
   const validation = validateUpload({ fileName, mimeType, size });
   if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 415 });
@@ -39,19 +40,19 @@ export async function POST(req: NextRequest) {
   const limits = await checkUploadLimits(creator, size);
   if (!limits.ok) return NextResponse.json({ error: limits.message, code: limits.code }, { status: 403 });
 
-  // RLS: solo devuelve el proyecto si pertenece al creador autenticado.
-  const { data: project } = await supabase
-    .from("projects")
-    .select("id, creator_id")
-    .eq("id", projectId)
+  // RLS: solo devuelve la publicación si pertenece al creador autenticado.
+  const { data: post } = await supabase
+    .from("posts")
+    .select("id, project_id")
+    .eq("id", postId)
     .eq("creator_id", creator.id)
     .maybeSingle();
-  if (!project) return NextResponse.json({ error: "Proyecto no encontrado" }, { status: 404 });
+  if (!post) return NextResponse.json({ error: "Publicación no encontrada" }, { status: 404 });
 
   const assetId = randomUUID();
   const key = buildAssetKey({
     creatorId: creator.id,
-    projectId: project.id,
+    projectId: post.project_id,
     assetId,
     kind: validation.kind,
     fileName,
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
   const { error: reserveError } = await admin.rpc("reserve_asset_upload", {
     p_asset_id: assetId,
     p_creator_id: creator.id,
-    p_project_id: project.id,
+    p_post_id: post.id,
     p_kind: validation.kind,
     p_r2_key: key,
     p_file_name: fileName,

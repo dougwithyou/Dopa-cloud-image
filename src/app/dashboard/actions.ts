@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCreatorContext } from "@/lib/auth";
 import { checkClientLimit, limitErrorFromDb } from "@/lib/limits";
-import { canUpload } from "@/lib/subscription";
 import { sendClientAccess } from "@/lib/invitations";
 import { abortMultipartUpload, deleteObject, deletePrefix, projectPrefix } from "@/lib/r2";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -267,67 +266,72 @@ export async function deleteProject(formData: FormData): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Assets
+// Publicaciones (copy + 1 archivo o carrusel)
 // ---------------------------------------------------------------------------
 
-export async function addCopy(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const { supabase, creator } = await ctxOrThrow();
-  if (!canUpload(creator)) return { error: "Tu suscripción no está activa." };
-  const parsed = z
-    .object({ projectId: Id, text: z.string().trim().min(1, "Escribe el texto").max(10_000) })
-    .safeParse({ projectId: formData.get("projectId"), text: formData.get("text") });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
-
-  const { data: last } = await supabase
-    .from("assets")
-    .select("position")
-    .eq("project_id", parsed.data.projectId)
-    .order("position", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const { error } = await supabase.from("assets").insert({
-    project_id: parsed.data.projectId,
-    creator_id: creator.id,
-    kind: "copy",
-    copy_text: parsed.data.text,
-    upload_status: "complete",
-    position: (last?.position ?? -1) + 1,
-  });
-  if (error) return { error: "No se pudo guardar el texto" };
-  revalidatePath(`/dashboard/projects/${parsed.data.projectId}`);
-  return { message: "Texto añadido" };
+/** Borra en R2 los archivos de una lista (y aborta los que seguían subiéndose). */
+async function removeFilesFromR2(files: { r2_key: string; r2_upload_id: string | null; upload_status: string }[]) {
+  await Promise.all(
+    files.map(async (f) => {
+      if (f.upload_status === "pending" && f.r2_upload_id) {
+        await abortMultipartUpload(f.r2_key, f.r2_upload_id).catch(() => undefined);
+      }
+      await deleteObject(f.r2_key).catch(() => undefined);
+    }),
+  );
 }
 
-export async function updateCaption(formData: FormData): Promise<void> {
+/** Guarda el copy de una publicación (el texto que el cliente copia en un clic). */
+export async function updatePostCaption(formData: FormData): Promise<void> {
   const { supabase, creator } = await ctxOrThrow();
-  const id = Id.parse(formData.get("assetId"));
-  const text = z.string().max(10_000).parse(formData.get("text") ?? "").trim();
-  const { data: asset } = await supabase
-    .from("assets")
-    .select("id, kind, project_id")
+  const id = Id.parse(formData.get("postId"));
+  const text = z.string().max(10_000).parse(formData.get("caption") ?? "").trim();
+  const { data: post } = await supabase
+    .from("posts")
+    .update({ caption: text || null })
     .eq("id", id)
     .eq("creator_id", creator.id)
+    .select("project_id")
     .maybeSingle();
-  if (!asset) return;
-  // Un texto suelto ('copy') no puede quedar vacío; el pie de una foto/video sí.
-  if (asset.kind === "copy" && !text) return;
-  await supabase
-    .from("assets")
-    .update({ copy_text: text || null })
-    .eq("id", asset.id)
-    .eq("creator_id", creator.id);
-  revalidatePath(`/dashboard/projects/${asset.project_id}`);
+  if (post) revalidatePath(`/dashboard/projects/${post.project_id}`);
 }
 
+/** Cambia el orden de una publicación dentro del proyecto. */
+export async function movePost(formData: FormData): Promise<void> {
+  const { supabase, creator } = await ctxOrThrow();
+  const id = Id.parse(formData.get("postId"));
+  const direction = z.enum(["up", "down"]).parse(formData.get("direction"));
+
+  const { data: post } = await supabase
+    .from("posts")
+    .select("id, project_id")
+    .eq("id", id)
+    .eq("creator_id", creator.id)
+    .single();
+  if (!post) return;
+
+  const { data: all } = await supabase
+    .from("posts")
+    .select("id, position")
+    .eq("project_id", post.project_id)
+    .order("position")
+    .order("created_at");
+  if (!all) return;
+  await swapAndRenumber(all, id, direction === "up" ? -1 : 1, (rowId, position) =>
+    supabase.from("posts").update({ position }).eq("id", rowId).eq("creator_id", creator.id),
+  );
+  revalidatePath(`/dashboard/projects/${post.project_id}`);
+}
+
+/** Cambia el orden de un archivo dentro de su carrusel. */
 export async function moveAsset(formData: FormData): Promise<void> {
   const { supabase, creator } = await ctxOrThrow();
   const id = Id.parse(formData.get("assetId"));
-  const direction = z.enum(["up", "down"]).parse(formData.get("direction"));
+  const direction = z.enum(["left", "right"]).parse(formData.get("direction"));
 
   const { data: asset } = await supabase
     .from("assets")
-    .select("id, project_id, position")
+    .select("id, post_id, project_id")
     .eq("id", id)
     .eq("creator_id", creator.id)
     .single();
@@ -336,45 +340,79 @@ export async function moveAsset(formData: FormData): Promise<void> {
   const { data: all } = await supabase
     .from("assets")
     .select("id, position")
-    .eq("project_id", asset.project_id)
+    .eq("post_id", asset.post_id)
     .order("position")
     .order("created_at");
   if (!all) return;
-
-  const index = all.findIndex((a) => a.id === id);
-  const swapWith = direction === "up" ? index - 1 : index + 1;
-  if (swapWith < 0 || swapWith >= all.length) return;
-
-  // Re-numera para resolver posiciones duplicadas y luego intercambia.
-  const ordered = all.map((a) => a.id);
-  [ordered[index], ordered[swapWith]] = [ordered[swapWith], ordered[index]];
-  await Promise.all(
-    ordered.map((assetId, position) =>
-      all.find((a) => a.id === assetId)?.position === position
-        ? null
-        : supabase.from("assets").update({ position }).eq("id", assetId).eq("creator_id", creator.id),
-    ),
+  await swapAndRenumber(all, id, direction === "left" ? -1 : 1, (rowId, position) =>
+    supabase.from("assets").update({ position }).eq("id", rowId).eq("creator_id", creator.id),
   );
   revalidatePath(`/dashboard/projects/${asset.project_id}`);
 }
 
+/** Intercambia un elemento con su vecino y re-numera posiciones 0..n-1. */
+async function swapAndRenumber(
+  rows: { id: string; position: number }[],
+  id: string,
+  delta: -1 | 1,
+  save: (id: string, position: number) => PromiseLike<unknown>,
+) {
+  const index = rows.findIndex((r) => r.id === id);
+  const target = index + delta;
+  if (index < 0 || target < 0 || target >= rows.length) return;
+  const ordered = rows.map((r) => r.id);
+  [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+  await Promise.all(
+    ordered.map((rowId, position) =>
+      rows.find((r) => r.id === rowId)?.position === position ? null : save(rowId, position),
+    ),
+  );
+}
+
+/** Quita un archivo de su publicación. Si era el último, se borra la publicación. */
 export async function deleteAsset(formData: FormData): Promise<void> {
   const { supabase, creator } = await ctxOrThrow();
   const id = Id.parse(formData.get("assetId"));
   const { data: asset } = await supabase
     .from("assets")
-    .select("id, project_id, r2_key, r2_upload_id, upload_status")
+    .select("id, post_id, project_id, r2_key, r2_upload_id, upload_status")
     .eq("id", id)
     .eq("creator_id", creator.id)
     .single();
   if (!asset) return;
 
-  if (asset.r2_key) {
-    if (asset.upload_status === "pending" && asset.r2_upload_id) {
-      await abortMultipartUpload(asset.r2_key, asset.r2_upload_id);
-    }
-    await deleteObject(asset.r2_key);
-  }
+  await removeFilesFromR2([asset]);
   await supabase.from("assets").delete().eq("id", asset.id);
+
+  const { count } = await supabase
+    .from("assets")
+    .select("id", { count: "exact", head: true })
+    .eq("post_id", asset.post_id);
+  if ((count ?? 0) === 0) {
+    const { data: post } = await supabase.from("posts").select("caption").eq("id", asset.post_id).maybeSingle();
+    // Se conserva si tiene copy escrito, para no perder el texto.
+    if (post && !post.caption) await supabase.from("posts").delete().eq("id", asset.post_id);
+  }
   revalidatePath(`/dashboard/projects/${asset.project_id}`);
+}
+
+/** Borra una publicación completa: su copy y todos sus archivos. */
+export async function deletePost(formData: FormData): Promise<void> {
+  const { supabase, creator } = await ctxOrThrow();
+  const id = Id.parse(formData.get("postId"));
+  const { data: post } = await supabase
+    .from("posts")
+    .select("id, project_id")
+    .eq("id", id)
+    .eq("creator_id", creator.id)
+    .single();
+  if (!post) return;
+
+  const { data: files } = await supabase
+    .from("assets")
+    .select("r2_key, r2_upload_id, upload_status")
+    .eq("post_id", post.id);
+  await removeFilesFromR2(files ?? []);
+  await supabase.from("posts").delete().eq("id", post.id); // borra los assets en cascada
+  revalidatePath(`/dashboard/projects/${post.project_id}`);
 }

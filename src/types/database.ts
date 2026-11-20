@@ -1,11 +1,11 @@
-// Tipos escritos a mano a partir de supabase/migrations/20261116000000_init.sql.
+// Tipos escritos a mano a partir de supabase/migrations/*.sql.
 // Puedes regenerarlos con: npx supabase gen types typescript --project-id <id> > src/types/database.ts
 
 export type SubscriptionStatus = "trialing" | "active" | "past_due" | "canceled" | "incomplete";
 export type PlanTier = "entry" | "medium" | "high";
 export type ProjectType = "photo_session" | "monthly_content";
 export type ProjectStatus = "draft" | "published" | "archived";
-export type AssetKind = "photo" | "video" | "copy";
+export type AssetKind = "photo" | "video";
 export type UploadStatus = "pending" | "complete";
 
 export type CreatorRow = {
@@ -46,17 +46,28 @@ export type ProjectRow = {
   updated_at: string;
 }
 
+/** Publicación: un copy + 1 archivo (individual) o varios (carrusel, máx. 20). */
+export type PostRow = {
+  id: string;
+  creator_id: string;
+  project_id: string;
+  caption: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export type AssetRow = {
   id: string;
   project_id: string;
+  post_id: string;
   creator_id: string;
   kind: AssetKind;
-  r2_key: string | null;
+  r2_key: string;
   r2_upload_id: string | null;
-  file_name: string | null;
-  mime_type: string | null;
+  file_name: string;
+  mime_type: string;
   size_bytes: number;
-  copy_text: string | null;
   upload_status: UploadStatus;
   position: number;
   created_at: string;
@@ -122,21 +133,25 @@ export type Database = {
           },
         ];
       };
+      posts: {
+        Row: PostRow;
+        Insert: Optional<PostRow, "id" | "caption" | "position" | "created_at" | "updated_at">;
+        Update: Partial<PostRow>;
+        Relationships: [
+          {
+            foreignKeyName: "posts_project_fk";
+            columns: ["creator_id", "project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["creator_id", "id"];
+          },
+        ];
+      };
       assets: {
         Row: AssetRow;
         Insert: Optional<
           AssetRow,
-          | "id"
-          | "r2_key"
-          | "r2_upload_id"
-          | "file_name"
-          | "mime_type"
-          | "size_bytes"
-          | "copy_text"
-          | "upload_status"
-          | "position"
-          | "created_at"
-          | "completed_at"
+          "id" | "r2_upload_id" | "size_bytes" | "upload_status" | "position" | "created_at" | "completed_at"
         >;
         Update: Partial<AssetRow>;
         Relationships: [
@@ -146,6 +161,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "projects";
             referencedColumns: ["creator_id", "id"];
+          },
+          {
+            foreignKeyName: "assets_post_fk";
+            columns: ["creator_id", "project_id", "post_id"];
+            isOneToOne: false;
+            referencedRelation: "posts";
+            referencedColumns: ["creator_id", "project_id", "id"];
           },
         ];
       };
@@ -170,7 +192,7 @@ export type Database = {
         Args: {
           p_asset_id: string;
           p_creator_id: string;
-          p_project_id: string;
+          p_post_id: string;
           p_kind: AssetKind;
           p_r2_key: string;
           p_file_name: string;

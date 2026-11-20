@@ -15,7 +15,7 @@ export default async function ProjectsPage() {
   const { supabase } = await requireCreator();
   const { data: projects } = await supabase
     .from("projects")
-    .select("id, title, type, status, created_at, clients(name), assets(count)")
+    .select("id, title, type, status, created_at, clients(name), posts(count)")
     .order("created_at", { ascending: false });
 
   return (
@@ -30,7 +30,7 @@ export default async function ProjectsPage() {
       {projects && projects.length > 0 ? (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((p) => {
-            const assetCount = (p.assets as unknown as { count: number }[] | null)?.[0]?.count ?? 0;
+            const postCount = (p.posts as unknown as { count: number }[] | null)?.[0]?.count ?? 0;
             return (
               <li key={p.id}>
                 <Link href={`/dashboard/projects/${p.id}`} className="card block p-5 transition hover:border-neutral-400">
@@ -42,7 +42,7 @@ export default async function ProjectsPage() {
                     {p.clients?.name ?? <span className="text-amber-700">Sin cliente</span>}
                   </p>
                   <p className="mt-3 text-xs text-neutral-500">
-                    {PROJECT_TYPE_LABEL[p.type]} · {assetCount} elementos · {formatDate(p.created_at)}
+                    {PROJECT_TYPE_LABEL[p.type]} · {postCount} {postCount === 1 ? "publicación" : "publicaciones"} · {formatDate(p.created_at)}
                   </p>
                 </Link>
               </li>

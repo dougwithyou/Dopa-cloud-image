@@ -21,7 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ asse
     .eq("id", assetId)
     .maybeSingle();
 
-  if (!asset || asset.kind === "copy" || !asset.r2_key || asset.upload_status !== "complete") {
+  if (!asset || asset.upload_status !== "complete") {
     return NextResponse.json({ error: "Archivo no encontrado" }, { status: 404 });
   }
 

@@ -66,14 +66,21 @@ const pr = await db.query(`
   returning id`);
 const [pA1pub, pA1draft, pA2pub, pB1] = pr.rows.map((r) => r.id);
 
+// Publicaciones: postA1 es un carrusel (foto completa + video pendiente).
+const po = await db.query(`
+  insert into public.posts (creator_id, project_id, caption, position) values
+   ('${cA}','${pA1pub}','Hola',0),
+   ('${cA}','${pA1draft}','Borrador',0),
+   ('${cB}','${pB1}','De B',0)
+  returning id`);
+const [postA1, postA1draft, postB] = po.rows.map((r) => r.id);
+
 await db.exec(`
-  insert into public.assets (project_id, creator_id, kind, r2_key, file_name, mime_type, size_bytes, upload_status)
-  values ('${pA1pub}','${cA}','photo','k1','a.jpg','image/jpeg',100,'complete'),
-         ('${pA1pub}','${cA}','video','k2','b.mp4','video/mp4',200,'pending'),
-         ('${pA1draft}','${cA}','photo','k3','c.jpg','image/jpeg',100,'complete'),
-         ('${pB1}','${cB}','photo','k4','d.jpg','image/jpeg',100,'complete');
-  insert into public.assets (project_id, creator_id, kind, copy_text, upload_status)
-  values ('${pA1pub}','${cA}','copy','Hola','complete');
+  insert into public.assets (project_id, post_id, creator_id, kind, r2_key, file_name, mime_type, size_bytes, upload_status, position)
+  values ('${pA1pub}','${postA1}','${cA}','photo','k1','a.jpg','image/jpeg',100,'complete',0),
+         ('${pA1pub}','${postA1}','${cA}','video','k2','b.mp4','video/mp4',200,'pending',1),
+         ('${pA1draft}','${postA1draft}','${cA}','photo','k3','c.jpg','image/jpeg',100,'complete',0),
+         ('${pB1}','${postB}','${cB}','photo','k4','d.jpg','image/jpeg',100,'complete',0);
 `);
 
 let failures = 0;
@@ -111,7 +118,9 @@ await as(U.creatorA, async () => {
   const projects = await db.query(`select id from public.projects`);
   check("Creador A ve solo sus 3 proyectos", projects.rows.length === 3);
   const assets = await db.query(`select id from public.assets`);
-  check("Creador A ve sus 4 assets (incl. pending y borrador)", assets.rows.length === 4);
+  check("Creador A ve sus 3 archivos (incl. pending y borrador)", assets.rows.length === 3);
+  const posts = await db.query(`select id from public.posts`);
+  check("Creador A ve solo sus 2 publicaciones", posts.rows.length === 2);
   const other = await db.query(`select id from public.assets where creator_id = '${cB}'`);
   check("Creador A no ve assets de B", other.rows.length === 0);
 
@@ -136,16 +145,28 @@ await as(U.creatorA, async () => {
   const upd = await db.query(`update public.creators set business_name = 'Nuevo' returning id`);
   check("Creador A sí puede cambiar business_name", upd.rows.length === 1);
   check(
-    "Creador A no puede insertar assets de media directamente",
-    (await fails(
-      `insert into public.assets (project_id, creator_id, kind, copy_text, upload_status) values ('${pA1pub}','${cA}','photo','x','complete')`,
-    )) !== null,
+    "Creador A no puede insertar archivos directamente (solo vía reserve)",
+    /permission denied/.test(
+      await fails(
+        `insert into public.assets (project_id, post_id, creator_id, kind, r2_key, file_name, mime_type) values ('${pA1pub}','${postA1}','${cA}','photo','x','x.jpg','image/jpeg')`,
+      ),
+    ),
   );
-  const copy = await db.query(
-    `insert into public.assets (project_id, creator_id, kind, copy_text, upload_status) values ('${pA1pub}','${cA}','copy','Texto','complete') returning id`,
+  const newPost = await db.query(
+    `insert into public.posts (creator_id, project_id, caption) values ('${cA}','${pA1pub}','Copy nuevo') returning id`,
   );
-  check("Creador A sí puede insertar textos (copy)", copy.rows.length === 1);
-  await db.query(`delete from public.assets where id = '${copy.rows[0].id}'`);
+  check("Creador A puede crear una publicación con su copy", newPost.rows.length === 1);
+  const edited = await db.query(`update public.posts set caption = 'Editado' where id = '${newPost.rows[0].id}' returning caption`);
+  check("Creador A puede editar el copy de su publicación", edited.rows[0]?.caption === "Editado");
+  await db.query(`delete from public.posts where id = '${newPost.rows[0].id}'`);
+  check(
+    "Creador A no puede crear publicaciones en proyectos de B",
+    (await fails(`insert into public.posts (creator_id, project_id) values ('${cA}','${pB1}')`)) !== null,
+  );
+  check(
+    "Creador A no puede editar publicaciones de B",
+    (await db.query(`update public.posts set caption = 'hack' where id = '${postB}' returning id`)).rows.length === 0,
+  );
   check(
     "Creador A no puede marcar upload_status = complete",
     /permission denied/.test(await fails(`update public.assets set upload_status = 'complete'`)),
@@ -162,7 +183,7 @@ await as(U.creatorA, async () => {
     "Creador A no puede llamar reserve_asset_upload",
     /permission denied/.test(
       await fails(
-        `select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${pA1pub}','photo','kx','x.jpg','image/jpeg',1)`,
+        `select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${postA1}','photo','kx','x.jpg','image/jpeg',1)`,
       ),
     ),
   );
@@ -189,9 +210,19 @@ await as(U.clientA1, async () => {
   );
   const assets = await db.query(`select id, kind, upload_status from public.assets`);
   check(
-    "Cliente A1 ve solo assets complete de su proyecto publicado (foto + copy)",
-    assets.rows.length === 2 && assets.rows.every((a) => a.upload_status === "complete"),
+    "Cliente A1 ve solo archivos complete de su proyecto publicado",
+    assets.rows.length === 1 && assets.rows[0].upload_status === "complete",
     JSON.stringify(assets.rows),
+  );
+  const posts = await db.query(`select id, caption from public.posts`);
+  check(
+    "Cliente A1 ve solo la publicación de su proyecto publicado, con su copy",
+    posts.rows.length === 1 && posts.rows[0].id === postA1 && posts.rows[0].caption === "Hola",
+    JSON.stringify(posts.rows),
+  );
+  check(
+    "Cliente no puede editar el copy",
+    (await db.query(`update public.posts set caption = 'hack' returning id`)).rows.length === 0,
   );
   const creators = await db.query(`select * from public.creators`);
   check("Cliente no lee la tabla creators (datos de facturación)", creators.rows.length === 0);
@@ -288,42 +319,73 @@ await db.exec(`set role service_role;`);
 check(
   "reserve: bloquea con suscripción cancelada",
   /subscription_inactive/.test(
-    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${pA1pub}','photo','r1','x.jpg','image/jpeg',10)`),
+    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${postA1}','photo','r1','x.jpg','image/jpeg',10)`),
   ),
 );
 await db.exec(`reset role; update public.creators set subscription_status = 'active', portal_access_until = null where id = '${cA}'; set role service_role;`);
 const ok = await db.query(
-  `select * from public.reserve_asset_upload(gen_random_uuid(),'${cA}','${pA1pub}','photo','r2','x.jpg','image/jpeg',1000)`,
+  `select * from public.reserve_asset_upload(gen_random_uuid(),'${cA}','${postA1}','photo','r2','x.jpg','image/jpeg',1000)`,
 );
-check("reserve: crea asset pending con posición", ok.rows[0]?.upload_status === "pending");
+check(
+  "reserve: crea archivo pending al final del carrusel",
+  ok.rows[0]?.upload_status === "pending" && ok.rows[0]?.position === 2 && ok.rows[0]?.project_id === pA1pub,
+  JSON.stringify(ok.rows[0]),
+);
 check(
   "reserve: bloquea al superar storage_limit_bytes",
   /storage_limit_exceeded/.test(
-    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${pA1pub}','video','r3','x.mp4','video/mp4',${GB})`),
+    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${postA1}','video','r3','x.mp4','video/mp4',${GB})`),
   ),
 );
 check(
-  "reserve: bloquea proyecto de otro creador",
-  /project_not_found/.test(
-    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${pB1}','photo','r4','x.jpg','image/jpeg',1)`),
+  "reserve: bloquea publicación de otro creador",
+  /post_not_found/.test(
+    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${postB}','photo','r4','x.jpg','image/jpeg',1)`),
   ),
 );
 await db.exec(`reset role; update public.creators set client_limit = 1 where id = '${cA}'; set role service_role;`);
 check(
   "reserve: bloquea si el creador excede client_limit (tras bajar de plan)",
   /client_limit_exceeded/.test(
-    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${pA1pub}','photo','r5','x.jpg','image/jpeg',1)`),
+    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${postA1}','photo','r5','x.jpg','image/jpeg',1)`),
   ),
 );
 await db.exec(`reset role;`);
 
-// Restricción de campos por tipo
+// Límite de carrusel (20) — se llena una publicación como superusuario.
+await db.exec(`update public.creators set client_limit = null where id = '${cA}'`);
+const full = await db.query(`insert into public.posts (creator_id, project_id) values ('${cA}','${pA1pub}') returning id`);
+const fullPost = full.rows[0].id;
+await db.exec(`
+  insert into public.assets (project_id, post_id, creator_id, kind, r2_key, file_name, mime_type, size_bytes, upload_status, position)
+  select '${pA1pub}','${fullPost}','${cA}','photo','full-'||g,'f.jpg','image/jpeg',1,'complete',g from generate_series(1,20) g;
+`);
+await db.exec(`set role service_role;`);
 check(
-  "CHECK: un asset copy no puede tener r2_key",
+  "reserve: bloquea el elemento 21 de un carrusel",
+  /carousel_limit_exceeded/.test(
+    await fails(`select public.reserve_asset_upload(gen_random_uuid(),'${cA}','${fullPost}','photo','r6','x.jpg','image/jpeg',1)`),
+  ),
+);
+await db.exec(`reset role;`);
+
+// Integridad: un archivo no puede apuntar a una publicación de otro proyecto.
+check(
+  "FK: archivo y publicación deben ser del mismo proyecto",
   (await fails(
-    `insert into public.assets (project_id, creator_id, kind, r2_key, copy_text, upload_status) values ('${pA1pub}','${cA}','copy','k9','x','complete')`,
+    `insert into public.assets (project_id, post_id, creator_id, kind, r2_key, file_name, mime_type) values ('${pA2pub}','${postA1}','${cA}','photo','k9','x.jpg','image/jpeg')`,
   )) !== null,
 );
+check(
+  "CHECK: ya no existen archivos de tipo 'copy'",
+  (await fails(
+    `insert into public.assets (project_id, post_id, creator_id, kind, r2_key, file_name, mime_type) values ('${pA1pub}','${postA1}','${cA}','copy','k10','x','text/plain')`,
+  )) !== null,
+);
+// Borrar la publicación borra sus archivos.
+await db.exec(`delete from public.posts where id = '${fullPost}'`);
+const left = await db.query(`select count(*)::int n from public.assets where post_id = '${fullPost}'`);
+check("Borrar una publicación borra sus archivos", left.rows[0].n === 0);
 
 console.log(failures === 0 ? "\nTODAS LAS PRUEBAS PASARON" : `\n${failures} PRUEBAS FALLARON`);
 process.exit(failures === 0 ? 0 : 1);

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { signDownloadUrl } from "@/lib/r2";
 import { PROJECT_TYPE_LABEL } from "@/lib/format";
-import { FeedItem, type FeedAsset } from "@/components/feed-item";
+import { FeedPost, type FeedPostData } from "@/components/feed-post";
 
 export const metadata = { title: "Proyecto" };
 
@@ -23,12 +23,11 @@ export default async function PortalProjectPage({ params }: { params: Promise<{ 
     .maybeSingle();
   if (!project) notFound();
 
-  const [{ data: assets }, { data: creators }] = await Promise.all([
+  const [{ data: postRows }, { data: creators }] = await Promise.all([
     supabase
-      .from("assets")
-      .select("id, kind, r2_key, file_name, mime_type, copy_text")
+      .from("posts")
+      .select("id, caption, position, created_at, assets(id, kind, r2_key, file_name, upload_status, position, created_at)")
       .eq("project_id", project.id)
-      .eq("upload_status", "complete")
       .order("position")
       .order("created_at"),
     supabase.rpc("my_creators"),
@@ -36,20 +35,28 @@ export default async function PortalProjectPage({ params }: { params: Promise<{ 
 
   const authorName = (creators ?? []).find((c) => c.id === project.creator_id)?.business_name ?? "Tu creador";
 
-  const feed: FeedAsset[] = await Promise.all(
-    (assets ?? []).map(async (a) => ({
-      id: a.id,
-      kind: a.kind,
-      file_name: a.file_name,
-      mime_type: a.mime_type,
-      copy_text: a.copy_text,
-      mediaUrl: a.r2_key ? await signDownloadUrl(a.r2_key, { disposition: "inline" }) : null,
-    })),
-  );
+  const feed: FeedPostData[] = (
+    await Promise.all(
+      (postRows ?? []).map(async (p) => ({
+        id: p.id,
+        caption: p.caption,
+        media: await Promise.all(
+          [...(p.assets ?? [])]
+            .filter((a) => a.upload_status === "complete")
+            .sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at))
+            .map(async (a) => ({
+              id: a.id,
+              kind: a.kind,
+              file_name: a.file_name,
+              url: await signDownloadUrl(a.r2_key, { disposition: "inline" }),
+            })),
+        ),
+      })),
+    )
+  ).filter((p) => p.media.length > 0 || p.caption);
 
-  const photos = feed.filter((a) => a.kind === "photo").length;
-  const videos = feed.filter((a) => a.kind === "video").length;
-  const texts = feed.filter((a) => a.copy_text).length;
+  const carousels = feed.filter((p) => p.media.length > 1).length;
+  const files = feed.reduce((n, p) => n + p.media.length, 0);
 
   return (
     <div>
@@ -62,9 +69,9 @@ export default async function PortalProjectPage({ params }: { params: Promise<{ 
           {authorName} · {PROJECT_TYPE_LABEL[project.type]}
         </p>
         <div className="mt-3 flex gap-6 text-sm">
-          <span><strong>{photos}</strong> fotos</span>
-          <span><strong>{videos}</strong> videos</span>
-          <span><strong>{texts}</strong> textos</span>
+          <span><strong>{feed.length}</strong> publicaciones</span>
+          <span><strong>{carousels}</strong> carruseles</span>
+          <span><strong>{files}</strong> archivos</span>
         </div>
       </div>
 
@@ -72,8 +79,8 @@ export default async function PortalProjectPage({ params }: { params: Promise<{ 
         <p className="px-4 py-10 text-center text-sm text-neutral-500">Este proyecto aún no tiene contenido.</p>
       ) : (
         <div className="space-y-2 sm:space-y-6">
-          {feed.map((asset, i) => (
-            <FeedItem key={asset.id} asset={asset} authorName={authorName} index={i} />
+          {feed.map((post, i) => (
+            <FeedPost key={post.id} post={post} authorName={authorName} index={i} />
           ))}
         </div>
       )}

@@ -1,16 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useState } from "react";
 import { FormMessage, SubmitButton } from "@/components/submit-button";
-import { addClientToProject, addCopy, createProject, updateBusinessName } from "./actions";
-
-function useResetOnSuccess(state: { message?: string } | null) {
-  const ref = useRef<HTMLFormElement>(null);
-  useEffect(() => {
-    if (state?.message) ref.current?.reset();
-  }, [state]);
-  return ref;
-}
+import { addClientToProject, createProject, updateBusinessName } from "./actions";
 
 export function CreateProjectForm() {
   const [state, action] = useActionState(createProject, null);
@@ -98,27 +90,6 @@ export function AddClientToProjectForm({
       <FormMessage state={state} />
       <SubmitButton className="btn-primary" pendingLabel="Agregando…">
         {submitLabel}
-      </SubmitButton>
-    </form>
-  );
-}
-
-export function AddCopyForm({ projectId }: { projectId: string }) {
-  const [state, action] = useActionState(addCopy, null);
-  const ref = useResetOnSuccess(state);
-  return (
-    <form ref={ref} action={action} className="space-y-3">
-      <input type="hidden" name="projectId" value={projectId} />
-      <textarea
-        className="input min-h-28"
-        name="text"
-        placeholder="Escribe un texto para redes (caption, hashtags, guion…)"
-        maxLength={10000}
-        required
-      />
-      <FormMessage state={state} />
-      <SubmitButton className="btn-secondary" pendingLabel="Guardando…">
-        Añadir texto
       </SubmitButton>
     </form>
   );

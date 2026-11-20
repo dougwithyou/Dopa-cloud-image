@@ -12,7 +12,7 @@ export interface Usage {
 export async function getUsage(creatorId: string): Promise<Usage> {
   const admin = createAdminClient();
   const [assets, clients] = await Promise.all([
-    admin.from("assets").select("size_bytes").eq("creator_id", creatorId).in("kind", ["photo", "video"]),
+    admin.from("assets").select("size_bytes").eq("creator_id", creatorId),
     admin.from("clients").select("id", { count: "exact", head: true }).eq("creator_id", creatorId),
   ]);
   if (assets.error) throw assets.error;
@@ -28,6 +28,8 @@ export type LimitErrorCode =
   | "storage_limit_exceeded"
   | "client_limit_exceeded"
   | "project_not_found"
+  | "post_not_found"
+  | "carousel_limit_exceeded"
   | "creator_not_found"
   | "invalid_kind"
   | "invalid_size";
@@ -38,6 +40,8 @@ export const LIMIT_MESSAGES: Record<LimitErrorCode, string> = {
   storage_limit_exceeded: "Superas el almacenamiento de tu plan. Libera espacio o cambia de plan.",
   client_limit_exceeded: "Superas el número de clientes de tu plan. Cambia de plan para continuar.",
   project_not_found: "Proyecto no encontrado.",
+  post_not_found: "Publicación no encontrada.",
+  carousel_limit_exceeded: "Un carrusel admite como máximo 20 fotos o videos.",
   creator_not_found: "Cuenta de creador no encontrada.",
   invalid_kind: "Tipo de archivo no permitido.",
   invalid_size: "Tamaño de archivo inválido.",

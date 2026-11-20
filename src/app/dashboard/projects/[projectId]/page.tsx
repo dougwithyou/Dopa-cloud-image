@@ -4,18 +4,12 @@ import { requireCreator } from "@/lib/auth";
 import { canUpload } from "@/lib/subscription";
 import { signDownloadUrl } from "@/lib/r2";
 import { ACCEPT_ATTRIBUTE } from "@/lib/upload-rules";
-import { formatBytes, PROJECT_STATUS_LABEL, PROJECT_TYPE_LABEL } from "@/lib/format";
+import { PROJECT_STATUS_LABEL, PROJECT_TYPE_LABEL } from "@/lib/format";
 import { Uploader } from "@/components/uploader";
 import { SubmitButton } from "@/components/submit-button";
-import { AddClientToProjectForm, AddCopyForm } from "../../forms";
-import {
-  deleteAsset,
-  deleteProject,
-  moveAsset,
-  removeClientFromProject,
-  updateCaption,
-  updateProjectStatus,
-} from "../../actions";
+import { AddClientToProjectForm } from "../../forms";
+import { deleteProject, removeClientFromProject, updateProjectStatus } from "../../actions";
+import { PostCard, type EditorPost } from "./post-card";
 
 export const metadata = { title: "Proyecto" };
 
@@ -39,17 +33,29 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
       ? `Tu plan permite ${creator.client_limit} clientes. Elige uno existente o cambia de plan.`
       : undefined;
 
-  const { data: assets } = await supabase
-    .from("assets")
-    .select("id, kind, r2_key, file_name, mime_type, size_bytes, copy_text, upload_status, position, created_at")
+  const { data: postRows } = await supabase
+    .from("posts")
+    .select("id, caption, position, created_at, assets(id, kind, r2_key, file_name, size_bytes, upload_status, position, created_at)")
     .eq("project_id", project.id)
     .order("position")
     .order("created_at");
 
-  const withUrls = await Promise.all(
-    (assets ?? []).map(async (a) => ({
-      ...a,
-      url: a.r2_key && a.upload_status === "complete" ? await signDownloadUrl(a.r2_key, { disposition: "inline" }) : null,
+  const posts: EditorPost[] = await Promise.all(
+    (postRows ?? []).map(async (p) => ({
+      id: p.id,
+      caption: p.caption,
+      assets: await Promise.all(
+        [...(p.assets ?? [])]
+          .sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at))
+          .map(async (a) => ({
+            id: a.id,
+            kind: a.kind,
+            file_name: a.file_name,
+            size_bytes: a.size_bytes,
+            upload_status: a.upload_status,
+            url: a.upload_status === "complete" ? await signDownloadUrl(a.r2_key, { disposition: "inline" }) : null,
+          })),
+      ),
     })),
   );
 
@@ -151,80 +157,32 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
         )}
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div>
-          <h2 className="mb-3 font-semibold">Subir fotos y videos</h2>
-          <Uploader projectId={project.id} accept={ACCEPT_ATTRIBUTE} disabledReason={uploadBlocked} />
-        </div>
-        <div>
-          <h2 className="mb-3 font-semibold">Añadir texto</h2>
-          {uploadBlocked ? <p className="text-sm text-neutral-500">Bloqueado mientras la suscripción no esté activa.</p> : <AddCopyForm projectId={project.id} />}
-        </div>
+      <section>
+        <h2 className="mb-1 font-semibold">Subir contenido</h2>
+        <p className="mb-3 text-sm text-neutral-500">
+          Elige si los archivos van como publicaciones separadas o juntos en un carrusel. Después escribe el copy de
+          cada publicación.
+        </p>
+        <Uploader projectId={project.id} accept={ACCEPT_ATTRIBUTE} disabledReason={uploadBlocked} />
       </section>
 
       <section>
-        <h2 className="mb-3 font-semibold">Contenido ({withUrls.length})</h2>
-        {withUrls.length === 0 ? (
-          <div className="card p-8 text-center text-sm text-neutral-500">Sube el primer archivo.</div>
+        <h2 className="mb-3 font-semibold">Publicaciones ({posts.length})</h2>
+        {posts.length === 0 ? (
+          <div className="card p-8 text-center text-sm text-neutral-500">
+            Aún no hay publicaciones. Sube fotos o videos para crear la primera.
+          </div>
         ) : (
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {withUrls.map((asset, i) => (
-              <li key={asset.id} className="card overflow-hidden">
-                <div className="aspect-square bg-neutral-100">
-                  {asset.kind === "photo" && asset.url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={asset.url} alt={asset.file_name ?? ""} loading="lazy" className="h-full w-full object-cover" />
-                  ) : asset.kind === "video" && asset.url ? (
-                    <video src={asset.url} controls playsInline preload="metadata" className="h-full w-full bg-black object-contain" />
-                  ) : asset.kind === "copy" ? (
-                    <div className="flex h-full items-center justify-center p-6">
-                      <p className="line-clamp-[8] whitespace-pre-wrap text-center text-sm">{asset.copy_text}</p>
-                    </div>
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-sm text-amber-700">Subida incompleta</div>
-                  )}
-                </div>
-                <div className="space-y-3 p-3">
-                  <div className="flex items-center justify-between gap-2 text-xs text-neutral-500">
-                    <span className="truncate">
-                      {asset.kind === "copy" ? "Texto" : `${asset.file_name} · ${formatBytes(asset.size_bytes)}`}
-                    </span>
-                    <span className="flex shrink-0 gap-1">
-                      <form action={moveAsset}>
-                        <input type="hidden" name="assetId" value={asset.id} />
-                        <input type="hidden" name="direction" value="up" />
-                        <button className="btn-ghost px-2 py-1" disabled={i === 0} aria-label="Mover antes">↑</button>
-                      </form>
-                      <form action={moveAsset}>
-                        <input type="hidden" name="assetId" value={asset.id} />
-                        <input type="hidden" name="direction" value="down" />
-                        <button className="btn-ghost px-2 py-1" disabled={i === withUrls.length - 1} aria-label="Mover después">↓</button>
-                      </form>
-                    </span>
-                  </div>
-                  {asset.upload_status === "complete" ? (
-                    <form action={updateCaption} className="space-y-2">
-                      <input type="hidden" name="assetId" value={asset.id} />
-                      <textarea
-                        name="text"
-                        className="input min-h-20 text-xs"
-                        defaultValue={asset.copy_text ?? ""}
-                        placeholder={asset.kind === "copy" ? "Texto" : "Caption / texto para esta publicación (opcional)"}
-                        maxLength={10000}
-                      />
-                      <SubmitButton className="btn-secondary w-full px-3 py-1.5 text-xs" pendingLabel="Guardando…">
-                        Guardar texto
-                      </SubmitButton>
-                    </form>
-                  ) : null}
-                  <form action={deleteAsset}>
-                    <input type="hidden" name="assetId" value={asset.id} />
-                    <SubmitButton className="btn-danger w-full px-3 py-1.5 text-xs" pendingLabel="Eliminando…" confirm="¿Eliminar este elemento? No se puede deshacer.">
-                      Eliminar
-                    </SubmitButton>
-                  </form>
-                </div>
-              </li>
+          <ul className="space-y-4">
+            {posts.map((post, i) => (
+              <PostCard
+                key={post.id}
+                post={post}
+                index={i}
+                total={posts.length}
+                projectId={project.id}
+                uploadBlocked={uploadBlocked}
+              />
             ))}
           </ul>
         )}

@@ -42,7 +42,8 @@ src/
     auth/confirm                   Destino de los enlaces de correo (token_hash o code)
     onboarding/                    Nombre del negocio + plan → Stripe Checkout
     dashboard/                     Panel del creador: resumen, clientes, proyectos, subida, suscripción
-    portal/                        Portal del cliente: proyectos y feed
+    portal/                        Portal del cliente: proyectos y feed de publicaciones (carruseles deslizables)
+    api/posts                      Crear publicación (antes de subir) y borrar publicaciones vacías
     acceso/                        El cliente crea su contraseña y queda vinculado (enlace del correo)
     api/uploads/...                Iniciar, firmar partes, completar y abortar subidas multipart
     api/assets/[id]/download       Descarga mediante redirección a una URL firmada de R2
@@ -283,6 +284,6 @@ Cambios o añadidos respecto a la especificación original:
   - `clients.invited_at` (cuándo se envió el acceso) y `accepted_at`.
   - `assets.r2_upload_id` y `completed_at`.
   - `stripe_events.received_at`.
-- **Textos:** un asset `copy` es un texto suelto que aparece como tarjeta en el feed. Las fotos y videos también pueden llevar `copy_text` como caption, que el cliente copia con un clic.
+- **Publicaciones y carruseles** (migración `20261121000000_posts_and_carousels.sql`). Un proyecto contiene **publicaciones** (`posts`). Cada publicación tiene **un copy** (`posts.caption`) y uno o más archivos: 1 archivo es una publicación individual y de 2 a 20 es un carrusel de Instagram (el límite de 20 lo aplica `reserve_asset_upload`). Al subir, el creador elige **Publicaciones separadas** (una publicación por archivo) o **Carrusel** (todos los archivos en una publicación, en el orden en que se seleccionaron). En el panel puede reordenar publicaciones y archivos dentro de un carrusel, quitar archivos y añadir más a un carrusel. El cliente ve el carrusel deslizable, descarga la foto actual o todas, y copia el copy con un clic. Ya no existen textos sueltos: el copy siempre está ligado a su contenido.
 - **Tamaños máximos:** fotos 50 MB y videos 5 GB por defecto. Se configuran con `MAX_PHOTO_UPLOAD_MB` y `MAX_VIDEO_UPLOAD_MB`.
 - **1 GB = 1024³ bytes** en los límites de almacenamiento.
