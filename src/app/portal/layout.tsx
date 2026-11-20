@@ -5,9 +5,9 @@ import { APP_NAME } from "@/lib/env";
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   await requireUser("/portal");
   return (
-    <div className="min-h-dvh bg-white sm:bg-neutral-50">
-      <header className="sticky top-0 z-10 border-b border-neutral-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-xl items-center justify-between px-4 py-3">
+    <div className="min-h-dvh bg-white">
+      <header className="border-b border-neutral-200 bg-white">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
           <Link href="/portal" className="text-lg font-bold tracking-tight">
             {APP_NAME}
           </Link>
@@ -16,7 +16,8 @@ export default async function PortalLayout({ children }: { children: React.React
           </form>
         </div>
       </header>
-      <main className="mx-auto max-w-xl sm:px-4 sm:py-6">{children}</main>
+      {/* Cada página define su ancho: la lista es estrecha, las plantillas ocupan más. */}
+      <main>{children}</main>
     </div>
   );
 }

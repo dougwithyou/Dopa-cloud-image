@@ -43,7 +43,7 @@ export default async function PortalPage() {
   );
 
   return (
-    <div className="px-4 py-6 sm:px-0 sm:py-0">
+    <div className="mx-auto max-w-xl px-4 py-6">
       <h1 className="mb-4 text-xl font-bold">Tus proyectos</h1>
       {projects && projects.length > 0 ? (
         <ul className="grid grid-cols-2 gap-3">

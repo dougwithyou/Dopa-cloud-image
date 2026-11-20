@@ -14,10 +14,10 @@ export function CreateProjectForm() {
           <input className="input" id="title" name="title" placeholder="Contenido de diciembre" required maxLength={160} />
         </div>
         <div>
-          <label className="label" htmlFor="type">Tipo</label>
+          <label className="label" htmlFor="type">Plantilla para el cliente</label>
           <select className="input" id="type" name="type" defaultValue="monthly_content">
-            <option value="monthly_content">Contenido mensual</option>
-            <option value="photo_session">Sesión de fotos</option>
+            <option value="monthly_content">Feed de Instagram (contenido para redes)</option>
+            <option value="photo_session">Galería de fotos (sesiones)</option>
           </select>
         </div>
       </div>
@@ -25,7 +25,9 @@ export function CreateProjectForm() {
       <SubmitButton className="btn-primary" pendingLabel="Creando…">
         Crear proyecto
       </SubmitButton>
-      <p className="text-xs text-neutral-500">Después podrás subir el contenido y agregar al cliente.</p>
+      <p className="text-xs text-neutral-500">
+        Después podrás subir el contenido, agregar al cliente y ver la vista previa. La plantilla se puede cambiar cuando quieras.
+      </p>
     </form>
   );
 }

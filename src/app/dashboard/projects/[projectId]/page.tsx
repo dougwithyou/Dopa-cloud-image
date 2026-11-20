@@ -4,11 +4,11 @@ import { requireCreator } from "@/lib/auth";
 import { canUpload } from "@/lib/subscription";
 import { signDownloadUrl } from "@/lib/r2";
 import { ACCEPT_ATTRIBUTE } from "@/lib/upload-rules";
-import { PROJECT_STATUS_LABEL, PROJECT_TYPE_LABEL } from "@/lib/format";
+import { PROJECT_STATUS_LABEL, PROJECT_TYPE_HELP, PROJECT_TYPE_LABEL } from "@/lib/format";
 import { Uploader } from "@/components/uploader";
 import { SubmitButton } from "@/components/submit-button";
 import { AddClientToProjectForm } from "../../forms";
-import { deleteProject, removeClientFromProject, updateProjectStatus } from "../../actions";
+import { deleteProject, removeClientFromProject, updateProjectStatus, updateProjectType } from "../../actions";
 import { PostCard, type EditorPost } from "./post-card";
 
 export const metadata = { title: "Proyecto" };
@@ -77,6 +77,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link href={`/preview/${project.id}`} target="_blank" className="btn-secondary">
+              👁 Vista previa
+            </Link>
             {(["draft", "published", "archived"] as const)
               .filter((s) => s !== project.status)
               .map((status) => (
@@ -104,6 +107,38 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
           </p>
         ) : null}
       </div>
+
+      <section className="card p-5">
+        <h2 className="mb-3 font-semibold">Plantilla para el cliente</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {(["monthly_content", "photo_session"] as const).map((type) => {
+            const active = project.type === type;
+            return (
+              <form key={type} action={updateProjectType}>
+                <input type="hidden" name="projectId" value={project.id} />
+                <input type="hidden" name="type" value={type} />
+                <button
+                  type="submit"
+                  disabled={active}
+                  className={`w-full rounded-xl border p-4 text-left transition ${
+                    active ? "border-neutral-900 ring-2 ring-neutral-900/10" : "border-neutral-200 hover:border-neutral-400"
+                  }`}
+                >
+                  <span className="flex items-center justify-between text-sm font-semibold">
+                    {PROJECT_TYPE_LABEL[type]}
+                    {active ? <span className="badge bg-neutral-900 text-white">En uso</span> : null}
+                  </span>
+                  <span className="mt-1 block text-xs text-neutral-500">{PROJECT_TYPE_HELP[type]}</span>
+                </button>
+              </form>
+            );
+          })}
+        </div>
+        <p className="mt-3 text-xs text-neutral-500">
+          Usa <Link href={`/preview/${project.id}`} target="_blank" className="font-semibold text-neutral-900 underline">Vista previa</Link>{" "}
+          para ver exactamente lo que verá tu cliente.
+        </p>
+      </section>
 
       <section className="card p-5">
         <h2 className="mb-1 font-semibold">Cliente</h2>

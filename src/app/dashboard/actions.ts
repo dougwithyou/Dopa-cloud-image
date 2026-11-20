@@ -214,6 +214,16 @@ export async function addClientToProject(_prev: ActionState, formData: FormData)
     : { error: `${client.name} quedó agregado, pero no se pudo enviar el correo. Usa “Reenviar acceso” en Clientes.` };
 }
 
+/** Cambia la plantilla (tipo) del proyecto: galería de fotos o feed de Instagram. */
+export async function updateProjectType(formData: FormData): Promise<void> {
+  const { supabase, creator } = await ctxOrThrow();
+  const id = Id.parse(formData.get("projectId"));
+  const type = z.enum(["photo_session", "monthly_content"]).parse(formData.get("type"));
+  await supabase.from("projects").update({ type }).eq("id", id).eq("creator_id", creator.id);
+  revalidatePath(`/dashboard/projects/${id}`);
+  revalidatePath("/dashboard", "layout");
+}
+
 export async function removeClientFromProject(formData: FormData): Promise<void> {
   const { supabase, creator } = await ctxOrThrow();
   const id = Id.parse(formData.get("projectId"));

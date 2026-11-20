@@ -15,9 +15,15 @@ export function formatDate(iso: string | null | undefined): string {
   return new Intl.DateTimeFormat("es", { day: "numeric", month: "long", year: "numeric" }).format(new Date(iso));
 }
 
+/** El tipo de proyecto define la plantilla que ve el cliente. */
 export const PROJECT_TYPE_LABEL = {
-  photo_session: "Sesión de fotos",
-  monthly_content: "Contenido mensual",
+  photo_session: "Galería de fotos",
+  monthly_content: "Feed de Instagram",
+} as const;
+
+export const PROJECT_TYPE_HELP = {
+  photo_session: "Estilo galería profesional: portada grande, mosaico de fotos y descarga. Ideal para sesiones.",
+  monthly_content: "Como un perfil de Instagram: cuadrícula de publicaciones, carruseles y copies. Ideal para contenido de redes.",
 } as const;
 
 export const PROJECT_STATUS_LABEL = {
