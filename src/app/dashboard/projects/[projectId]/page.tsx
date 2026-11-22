@@ -10,7 +10,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { AddClientToProjectForm } from "../../forms";
 import { deleteProject, removeClientFromProject, updateProjectStatus, updateProjectType } from "../../actions";
 import { PostCard, type EditorAsset, type EditorPost } from "./post-card";
-import { EyeIcon } from "@/components/icons";
+import { EyeIcon, ImageIcon } from "@/components/icons";
 import { MediaLibrary, type LibraryItem } from "./media-library";
 
 export const metadata = { title: "Proyecto" };
@@ -105,6 +105,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {project.type === "photo_session" ? (
+              <Link href={`/design/${project.id}`} className="btn-secondary">
+                <ImageIcon className="h-4 w-4" /> Diseñar galería
+              </Link>
+            ) : null}
             <Link href={`/preview/${project.id}`} target="_blank" className="btn-secondary">
               <EyeIcon className="h-4 w-4" /> Vista previa
             </Link>
@@ -234,10 +239,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
           projectId={project.id}
           template={isFeed ? "feed" : "gallery"}
           items={library}
-          posts={posts.map((p, i) => ({
-            id: p.id,
-            label: `Publicación ${i + 1}${p.assets.length > 1 ? ` (carrusel · ${p.assets.length})` : ""}`,
-          }))}
+          posts={posts.map((p, i) =>
+            isFeed
+              ? { id: p.id, label: `Publicación ${i + 1}${p.assets.length > 1 ? ` (carrusel · ${p.assets.length})` : ""}` }
+              : { id: p.id, label: `Escena ${i + 1}${p.caption ? ` · ${p.caption.split("\n")[0]}` : ""}` },
+          )}
         />
       </section>
 
@@ -259,12 +265,32 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
             </ul>
           )}
         </section>
-      ) : posts.length > 0 ? (
-        <p className="rounded-xl bg-neutral-50 p-4 text-sm text-neutral-600">
-          Este proyecto usa la plantilla <strong>Galería de fotos</strong>: tu cliente ve todo el material, sin
-          publicaciones. Si cambias a <strong>Feed de Instagram</strong>, tus {posts.length} publicaciones siguen guardadas.
-        </p>
-      ) : null}
+      ) : (
+        <section>
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="font-semibold">2. Escenas ({posts.length})</h2>
+              <p className="text-sm text-neutral-500">
+                Opcional: secciones con título, como “Ceremonia” o “Recepción”. Las fotos sin escena aparecen al final.
+              </p>
+            </div>
+            <Link href={`/design/${project.id}`} className="btn-primary">
+              <ImageIcon className="h-4 w-4" /> Diseñar galería
+            </Link>
+          </div>
+          {posts.length === 0 ? (
+            <div className="card p-6 text-center text-sm text-neutral-500">
+              Sin escenas: tu cliente ve todas las fotos juntas. Para crear una, selecciona fotos en el material y pulsa “Crear escena”.
+            </div>
+          ) : (
+            <ul className="space-y-4">
+              {posts.map((post, i) => (
+                <PostCard key={post.id} post={post} index={i} total={posts.length} variant="scene" />
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       <section className="border-t border-neutral-200 pt-6">
         <form action={deleteProject}>

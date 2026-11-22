@@ -8,11 +8,13 @@ export function DownloadAllButton({
   zipName,
   label,
   className = "btn-primary",
+  style,
 }: {
   entries: ZipEntry[];
   zipName: string;
   label: string;
   className?: string;
+  style?: React.CSSProperties;
 }) {
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +38,7 @@ export function DownloadAllButton({
         onClick={run}
         disabled={progress !== null || entries.length === 0}
         className={`whitespace-nowrap ${className}`}
+        style={style}
       >
         {progress === null ? label : `Preparando ZIP… ${Math.round(progress * 100)}%`}
       </button>

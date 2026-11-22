@@ -17,7 +17,7 @@ export default async function PreviewPage({ params }: { params: Promise<{ projec
 
   const { data: project } = await supabase
     .from("projects")
-    .select("id, title, type, status, created_at, clients(name)")
+    .select("id, title, type, status, design, created_at, clients(name)")
     .eq("id", projectId)
     .eq("creator_id", creator.id)
     .maybeSingle();

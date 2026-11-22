@@ -14,7 +14,7 @@ export default async function PortalProjectPage({ params }: { params: Promise<{ 
   // mostrar lo compartido con él como cliente.
   const { data: project } = await supabase
     .from("projects")
-    .select("id, title, type, creator_id, created_at, clients!inner(user_id)")
+    .select("id, title, type, design, creator_id, created_at, clients!inner(user_id)")
     .eq("id", projectId)
     .eq("status", "published")
     .eq("clients.user_id", user.id)

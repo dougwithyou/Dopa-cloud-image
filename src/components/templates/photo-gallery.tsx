@@ -1,21 +1,40 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-
-/** Número de columnas del mosaico según el ancho de pantalla. */
-function useColumnCount() {
-  const [count, setCount] = useState(3);
-  useEffect(() => {
-    const update = () => setCount(window.innerWidth >= 1024 ? 4 : window.innerWidth >= 640 ? 3 : 2);
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
-  return count;
-}
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { DownloadAllButton } from "@/components/download-all-button";
 import { downloadHref, type FeedMedia } from "@/components/feed-post";
 import { pad, slugify, type ZipEntry } from "@/lib/zip-download";
+import {
+  FONTS,
+  GAP_PX,
+  GOOGLE_FONTS_HREF,
+  PALETTES,
+  columnsFor,
+  type GalleryDesign,
+} from "@/lib/gallery-design";
+
+export interface GalleryScene {
+  id: string;
+  title: string;
+  media: FeedMedia[];
+}
+
+/**
+ * Columnas del mosaico según el tamaño elegido y el ancho del CONTENEDOR (no
+ * de la ventana), para que la vista previa del editor sea fiel.
+ */
+function useColumnCount(size: number) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(1280);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width + 64));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return { ref, count: columnsFor(size, width) };
+}
 
 function DownloadIcon() {
   return (
@@ -121,124 +140,259 @@ function Lightbox({
   );
 }
 
+/** Tipografía del título según el estilo. */
+function titleStyle(design: GalleryDesign): CSSProperties {
+  const family = FONTS[design.font].family;
+  if (design.style === "editorial") return { fontFamily: family, textTransform: "uppercase", letterSpacing: "0.18em", fontWeight: 400 };
+  if (design.style === "airy") return { fontFamily: family, letterSpacing: "0.04em", fontWeight: 300 };
+  return { fontFamily: family, fontWeight: 500 };
+}
+
+function CoverMedia({ item, className }: { item: FeedMedia | undefined; className: string }) {
+  if (!item) return <div className={`bg-neutral-300 ${className}`} />;
+  return item.kind === "photo" ? (
+    // eslint-disable-next-line @next/next/no-img-element -- URL firmada de R2
+    <img src={item.url} alt="" className={`object-cover ${className}`} />
+  ) : (
+    <video src={`${item.url}#t=0.1`} muted playsInline preload="metadata" className={`object-cover ${className}`} />
+  );
+}
+
+/** Portada según el diseño: pantalla completa, dividida o con marco. */
+function Cover({
+  design,
+  title,
+  subtitle,
+  cover,
+}: {
+  design: GalleryDesign;
+  title: string;
+  subtitle: string;
+  cover: FeedMedia | undefined;
+}) {
+  const palette = PALETTES[design.palette];
+  const ts = titleStyle(design);
+  const cta = (light: boolean) => (
+    <a
+      href="#galeria"
+      className="mt-8 inline-block border px-6 py-2.5 text-xs uppercase tracking-[0.3em] transition hover:opacity-70"
+      style={{ borderColor: light ? "rgba(255,255,255,.8)" : palette.text, color: light ? "#fff" : palette.text }}
+    >
+      Ver galería
+    </a>
+  );
+
+  if (design.cover === "split") {
+    return (
+      <section className="grid min-h-[80vh] md:grid-cols-2" style={{ background: palette.surface }}>
+        <div className="order-2 flex flex-col justify-center px-8 py-14 md:order-1 md:px-16">
+          <h1 className="text-4xl leading-tight sm:text-6xl" style={ts}>
+            {title}
+          </h1>
+          <p className="mt-5 text-xs uppercase tracking-[0.3em]" style={{ color: palette.muted }}>
+            {subtitle}
+          </p>
+          <div>{cta(false)}</div>
+        </div>
+        <CoverMedia item={cover} className="order-1 h-[55vh] w-full md:order-2 md:h-full" />
+      </section>
+    );
+  }
+
+  if (design.cover === "frame") {
+    return (
+      <section className="px-4 pb-10 pt-14 text-center sm:px-10 sm:pt-20" style={{ background: palette.bg }}>
+        <h1 className="text-4xl sm:text-6xl" style={ts}>
+          {title}
+        </h1>
+        <p className="mt-4 text-xs uppercase tracking-[0.3em]" style={{ color: palette.muted }}>
+          {subtitle}
+        </p>
+        <div className="mx-auto mt-10 max-w-5xl p-2 sm:p-3" style={{ background: palette.surface, boxShadow: `0 0 0 1px ${palette.accent}` }}>
+          <CoverMedia item={cover} className="aspect-[3/2] w-full" />
+        </div>
+        {cta(false)}
+      </section>
+    );
+  }
+
+  return (
+    <section className="relative flex h-[70vh] min-h-[420px] items-center justify-center overflow-hidden bg-neutral-900 sm:h-[88vh]">
+      <CoverMedia item={cover} className="absolute inset-0 h-full w-full" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/30 to-black/60" />
+      <div className="relative px-6 text-center text-white">
+        <h1 className="text-4xl sm:text-6xl" style={ts}>
+          {title}
+        </h1>
+        <p className="mt-4 text-xs uppercase tracking-[0.3em] text-white/80 sm:text-sm">{subtitle}</p>
+        {cta(true)}
+      </div>
+    </section>
+  );
+}
+
+/** Mosaico ordenado de izquierda a derecha. */
+function Masonry({
+  items,
+  offset,
+  design,
+  onOpen,
+}: {
+  items: FeedMedia[];
+  offset: number;
+  design: GalleryDesign;
+  onOpen: (index: number) => void;
+}) {
+  const { ref, count: columnCount } = useColumnCount(design.size);
+  const gap = GAP_PX[design.spacing] ?? 10;
+  const columns = Array.from({ length: columnCount }, (_, c) =>
+    items.map((m, i) => ({ m, i })).filter(({ i }) => i % columnCount === c),
+  );
+  return (
+    <div ref={ref} className="flex" style={{ gap }}>
+      {columns.map((column, c) => (
+        <div key={c} className="flex min-w-0 flex-1 flex-col" style={{ gap }}>
+          {column.map(({ m, i }) => (
+            <div key={m.id} className="group relative">
+              <button type="button" onClick={() => onOpen(offset + i)} className="block w-full" aria-label={`Ver ${m.file_name}`}>
+                {m.kind === "photo" ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- URL firmada de R2
+                  <img src={m.url} alt={m.file_name} loading={offset + i < 8 ? "eager" : "lazy"} className="block h-auto w-full bg-black/5" />
+                ) : (
+                  <span className="relative block">
+                    <video src={`${m.url}#t=0.1`} muted playsInline preload="metadata" className="block h-auto w-full bg-neutral-900" />
+                    <span className="absolute inset-0 flex items-center justify-center text-4xl text-white drop-shadow">▶</span>
+                  </span>
+                )}
+              </button>
+              <a
+                href={downloadHref(m.id)}
+                download
+                aria-label={`Descargar ${m.file_name}`}
+                className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-neutral-900 opacity-100 shadow transition sm:opacity-0 sm:group-hover:opacity-100"
+              >
+                <DownloadIcon />
+              </a>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
- * Plantilla "Galería de fotos" (estilo Pixieset): portada a pantalla completa,
- * mosaico respetando la proporción de cada foto y visor con descarga.
+ * Plantilla "Galería de fotos" (estilo Pixieset), personalizable desde el
+ * editor de diseño: estilo, paleta, tipografía, portada, tamaño y espaciado.
+ * Si hay escenas, se muestran como secciones con título y pestañas.
  */
 export function PhotoGalleryTemplate({
   title,
   authorName,
   date,
   items,
+  scenes = [],
+  design,
 }: {
   title: string;
   authorName: string;
   date: string;
+  /** Todo el material del proyecto. */
   items: FeedMedia[];
+  /** Escenas (publicaciones del proyecto) con sus fotos. */
+  scenes?: GalleryScene[];
+  design: GalleryDesign;
 }) {
+  const palette = PALETTES[design.palette];
   const [open, setOpen] = useState<number | null>(null);
-  const columnCount = useColumnCount();
-  // Reparto en columnas de izquierda a derecha (1, 2, 3, 4 en la primera fila),
-  // como en las galerías profesionales.
-  const columns = Array.from({ length: columnCount }, (_, c) =>
-    items.map((m, i) => ({ m, i })).filter(({ i }) => i % columnCount === c),
-  );
-  const cover = items.find((m) => m.kind === "photo") ?? items[0];
+
+  // Secciones: escenas con fotos y, al final, las fotos sin escena.
+  const withMedia = scenes.filter((s) => s.media.length > 0);
+  const inScenes = new Set(withMedia.flatMap((s) => s.media.map((m) => m.id)));
+  const rest = items.filter((m) => !inScenes.has(m.id));
+  const sections: GalleryScene[] =
+    withMedia.length > 0
+      ? [...withMedia, ...(rest.length > 0 ? [{ id: "mas-fotos", title: "Más fotos", media: rest }] : [])]
+      : [{ id: "todas", title: "", media: items }];
+  const ordered = sections.flatMap((s) => s.media);
+
+  const cover = ordered.find((m) => m.id === design.coverAssetId) ?? ordered.find((m) => m.kind === "photo") ?? ordered[0];
   const zipPrefix = slugify(title);
-  const entries: ZipEntry[] = items.map((m, i) => ({
-    name: `${pad(i + 1, 3)}-${m.file_name}`,
-    url: m.url,
-    size: m.size_bytes,
-    downloadHref: downloadHref(m.id),
-  }));
+  const multi = withMedia.length > 0;
+  const entries: ZipEntry[] = sections.flatMap((s, si) =>
+    s.media.map((m, i) => ({
+      name: `${multi ? `${pad(si + 1)}-${slugify(s.title)}/` : ""}${pad(i + 1, 3)}-${m.file_name}`,
+      url: m.url,
+      size: m.size_bytes,
+      downloadHref: downloadHref(m.id),
+    })),
+  );
+  const ts = titleStyle(design);
+  let offset = 0;
 
   return (
-    <div className="bg-white">
-      {/* Portada */}
-      <section className="relative flex h-[70vh] min-h-[420px] items-center justify-center overflow-hidden bg-neutral-900 sm:h-[88vh]">
-        {cover ? (
-          cover.kind === "photo" ? (
-            // eslint-disable-next-line @next/next/no-img-element -- URL firmada de R2
-            <img src={cover.url} alt="" className="absolute inset-0 h-full w-full object-cover" />
-          ) : (
-            <video src={`${cover.url}#t=0.1`} muted playsInline preload="metadata" className="absolute inset-0 h-full w-full object-cover" />
-          )
-        ) : null}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/30 to-black/60" />
-        <div className="relative px-6 text-center text-white">
-          <h1 className="font-serif text-4xl uppercase tracking-[0.2em] sm:text-6xl">{title}</h1>
-          <p className="mt-4 text-xs uppercase tracking-[0.3em] text-white/80 sm:text-sm">
-            {authorName} · {date}
-          </p>
-          <a
-            href="#galeria"
-            className="mt-8 inline-block border border-white/80 px-6 py-2.5 text-xs uppercase tracking-[0.3em] transition hover:bg-white hover:text-neutral-900"
-          >
-            Ver galería
-          </a>
-        </div>
-      </section>
+    <div style={{ background: palette.bg, color: palette.text, fontFamily: FONTS.sans.family }}>
+      <link rel="stylesheet" href={GOOGLE_FONTS_HREF} precedence="default" />
+      <Cover design={design} title={title} subtitle={`${authorName} · ${date}`} cover={cover} />
 
-      {/* Barra */}
-      <div id="galeria" className="sticky top-0 z-20 border-b border-neutral-200 bg-white/95 backdrop-blur">
+      {/* Barra con escenas y descarga */}
+      <div id="galeria" className="sticky top-0 z-20 border-b backdrop-blur" style={{ background: `${palette.bg}f2`, borderColor: palette.accent }}>
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-8">
           <div className="min-w-0">
-            <p className="truncate font-serif text-lg uppercase tracking-[0.15em]">{title}</p>
-            <p className="text-xs text-neutral-500">
-              {items.length} {items.length === 1 ? "archivo" : "archivos"} · {authorName}
+            <p className="truncate text-lg" style={ts}>
+              {title}
+            </p>
+            <p className="text-xs" style={{ color: palette.muted }}>
+              {ordered.length} {ordered.length === 1 ? "archivo" : "archivos"} · {authorName}
             </p>
           </div>
           <DownloadAllButton
             entries={entries}
             zipName={`${zipPrefix}.zip`}
             label="↓ Descargar todo"
-            className="btn-primary shrink-0 whitespace-nowrap rounded-none px-3 py-2 text-[11px] uppercase tracking-widest sm:px-4 sm:text-xs"
+            className="btn shrink-0 rounded-none px-3 py-2 text-[11px] uppercase tracking-widest sm:px-4 sm:text-xs"
+            style={{ background: palette.text, color: palette.bg }}
           />
         </div>
+        {multi ? (
+          <nav className="mx-auto flex max-w-7xl gap-6 overflow-x-auto px-4 pb-2 text-sm sm:px-8" aria-label="Escenas">
+            {sections.map((s) => (
+              <a key={s.id} href={`#escena-${s.id}`} className="shrink-0 whitespace-nowrap py-1 hover:underline" style={{ fontFamily: FONTS[design.font].family }}>
+                {s.title}
+              </a>
+            ))}
+          </nav>
+        ) : null}
       </div>
 
-      {/* Mosaico */}
-      <section className="mx-auto max-w-7xl px-2 py-4 sm:px-8 sm:py-8">
-        {items.length === 0 ? (
-          <p className="py-16 text-center text-sm text-neutral-500">Esta galería todavía no tiene fotos.</p>
+      <section className="mx-auto max-w-7xl px-2 py-6 sm:px-8 sm:py-10">
+        {ordered.length === 0 ? (
+          <p className="py-16 text-center text-sm" style={{ color: palette.muted }}>
+            Esta galería todavía no tiene fotos.
+          </p>
         ) : (
-          <div className="flex gap-2 sm:gap-3">
-            {columns.map((column, c) => (
-              <div key={c} className="flex min-w-0 flex-1 flex-col gap-2 sm:gap-3">
-            {column.map(({ m, i }) => (
-              <div key={m.id} className="group relative">
-                <button type="button" onClick={() => setOpen(i)} className="block w-full" aria-label={`Ver ${m.file_name}`}>
-                  {m.kind === "photo" ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- URL firmada de R2
-                    <img src={m.url} alt={m.file_name} loading={i < 8 ? "eager" : "lazy"} className="block h-auto w-full bg-neutral-100" />
-                  ) : (
-                    <span className="relative block">
-                      <video src={`${m.url}#t=0.1`} muted playsInline preload="metadata" className="block h-auto w-full bg-neutral-900" />
-                      <span className="absolute inset-0 flex items-center justify-center text-4xl text-white drop-shadow">▶</span>
-                    </span>
-                  )}
-                </button>
-                <a
-                  href={downloadHref(m.id)}
-                  download
-                  aria-label={`Descargar ${m.file_name}`}
-                  className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-neutral-900 opacity-100 shadow transition sm:opacity-0 sm:group-hover:opacity-100"
-                >
-                  <DownloadIcon />
-                </a>
+          sections.map((s, si) => {
+            const start = offset;
+            offset += s.media.length;
+            return (
+              <div key={s.id} id={`escena-${s.id}`} className={`scroll-mt-28 ${si > 0 ? "mt-16 sm:mt-24" : ""}`}>
+                {s.title ? (
+                  <h2 className="mb-6 text-center text-xl sm:mb-10 sm:text-2xl" style={ts}>
+                    {s.title}
+                  </h2>
+                ) : null}
+                <Masonry items={s.media} offset={start} design={design} onOpen={setOpen} />
               </div>
-            ))}
-              </div>
-            ))}
-          </div>
+            );
+          })
         )}
       </section>
 
-      <footer className="py-10 text-center text-xs uppercase tracking-[0.3em] text-neutral-400">{authorName}</footer>
+      <footer className="py-12 text-center text-xs uppercase tracking-[0.3em]" style={{ color: palette.muted }}>
+        {authorName}
+      </footer>
 
-      {open !== null ? (
-        <Lightbox items={items} index={open} onClose={() => setOpen(null)} onNavigate={setOpen} />
-      ) : null}
+      {open !== null ? <Lightbox items={ordered} index={open} onClose={() => setOpen(null)} onNavigate={setOpen} /> : null}
     </div>
   );
 }

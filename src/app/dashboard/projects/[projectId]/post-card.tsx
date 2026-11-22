@@ -34,35 +34,59 @@ function Media({ asset, className }: { asset: EditorAsset; className: string }) 
 }
 
 /** Tarjeta de una publicación en el panel: archivos, copy y acciones. */
-export function PostCard({ post, index, total }: { post: EditorPost; index: number; total: number }) {
+export function PostCard({
+  post,
+  index,
+  total,
+  variant = "post",
+}: {
+  post: EditorPost;
+  index: number;
+  total: number;
+  /** "scene": en una galería, la publicación es una escena con título. */
+  variant?: "post" | "scene";
+}) {
+  const isScene = variant === "scene";
   const count = post.assets.length;
   const isCarousel = count > 1;
-  const label = count === 0 ? "Sin archivos" : isCarousel ? `Carrusel · ${count} archivos` : post.assets[0].kind === "video" ? "Video" : "Foto";
+  const label = isScene
+    ? `${count} ${count === 1 ? "archivo" : "archivos"}`
+    : count === 0
+      ? "Sin archivos"
+      : isCarousel
+        ? `Carrusel · ${count} archivos`
+        : post.assets[0].kind === "video"
+          ? "Video"
+          : "Foto";
+  const noun = isScene ? "Escena" : "Publicación";
 
   return (
     <li className="card overflow-hidden">
       <header className="flex items-center justify-between gap-2 border-b border-neutral-100 px-4 py-2">
         <p className="text-sm">
-          <span className="font-semibold">Publicación {index + 1}</span>
+          <span className="font-semibold">
+            {noun} {index + 1}
+            {isScene && post.caption ? ` · ${post.caption.split("\n")[0]}` : ""}
+          </span>
           <span className="ml-2 text-neutral-500">{label}</span>
         </p>
         <div className="flex items-center gap-1">
           <form action={movePost}>
             <input type="hidden" name="postId" value={post.id} />
             <input type="hidden" name="direction" value="up" />
-            <button className="btn-ghost px-2 py-1" disabled={index === 0} aria-label="Subir publicación">↑</button>
+            <button className="btn-ghost px-2 py-1" disabled={index === 0} aria-label={`Subir ${noun.toLowerCase()}`}>↑</button>
           </form>
           <form action={movePost}>
             <input type="hidden" name="postId" value={post.id} />
             <input type="hidden" name="direction" value="down" />
-            <button className="btn-ghost px-2 py-1" disabled={index === total - 1} aria-label="Bajar publicación">↓</button>
+            <button className="btn-ghost px-2 py-1" disabled={index === total - 1} aria-label={`Bajar ${noun.toLowerCase()}`}>↓</button>
           </form>
           <form action={deletePost}>
             <input type="hidden" name="postId" value={post.id} />
             <SubmitButton
               className="btn-ghost px-2 py-1 text-xs text-red-600"
               pendingLabel="…"
-              confirm={`¿Eliminar la publicación ${index + 1}? ${count > 0 ? "Sus archivos vuelven a la biblioteca; " : ""}el copy se pierde.`}
+              confirm={`¿Eliminar la ${noun.toLowerCase()} ${index + 1}? ${count > 0 ? "Sus archivos vuelven a la biblioteca" : "No tiene archivos"}${isScene ? "." : "; el copy se pierde."}`}
             >
               Eliminar
             </SubmitButton>
@@ -120,26 +144,37 @@ export function PostCard({ post, index, total }: { post: EditorPost; index: numb
           ) : null}
         </div>
 
-        {/* Copy */}
+        {/* Copy (publicación) o título (escena) */}
         <form action={updatePostCaption} className="flex min-w-0 flex-col gap-2">
           <input type="hidden" name="postId" value={post.id} />
           <label className="label" htmlFor={`caption-${post.id}`}>
-            Copy de esta publicación
+            {isScene ? "Título de la escena" : "Copy de esta publicación"}
           </label>
-          <textarea
-            id={`caption-${post.id}`}
-            name="caption"
-            className="input min-h-40 flex-1 text-sm"
-            defaultValue={post.caption ?? ""}
-            placeholder={
-              isCarousel
-                ? "Texto para todo el carrusel: caption, hashtags, menciones…"
-                : "Caption, hashtags, menciones… Tu cliente lo copiará en un clic."
-            }
-            maxLength={10000}
-          />
+          {isScene ? (
+            <input
+              id={`caption-${post.id}`}
+              name="caption"
+              className="input text-sm"
+              defaultValue={post.caption?.split("\n")[0] ?? ""}
+              placeholder="Ceremonia, Recepción, Retratos…"
+              maxLength={80}
+            />
+          ) : (
+            <textarea
+              id={`caption-${post.id}`}
+              name="caption"
+              className="input min-h-40 flex-1 text-sm"
+              defaultValue={post.caption ?? ""}
+              placeholder={
+                isCarousel
+                  ? "Texto para todo el carrusel: caption, hashtags, menciones…"
+                  : "Caption, hashtags, menciones… Tu cliente lo copiará en un clic."
+              }
+              maxLength={10000}
+            />
+          )}
           <SubmitButton className="btn-secondary self-start px-3 py-1.5 text-xs" pendingLabel="Guardando…">
-            Guardar copy
+            {isScene ? "Guardar título" : "Guardar copy"}
           </SubmitButton>
         </form>
       </div>

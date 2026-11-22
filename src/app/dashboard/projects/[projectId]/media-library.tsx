@@ -50,8 +50,9 @@ export function MediaLibrary({
   posts: { id: string; label: string }[];
 }) {
   const isFeed = template === "feed";
+  const groupLabel = isFeed ? "Publicación" : "Escena";
   const [selected, setSelected] = useState<string[]>([]);
-  const [showUsed, setShowUsed] = useState(!isFeed);
+  const [showUsed, setShowUsed] = useState(true);
   const [caption, setCaption] = useState("");
   const [targetPost, setTargetPost] = useState(posts[0]?.id ?? "");
   const [notice, setNotice] = useState<Notice>(null);
@@ -63,7 +64,7 @@ export function MediaLibrary({
 
   function toggle(item: LibraryItem) {
     if (item.upload_status !== "complete") return;
-    if (isFeed && item.postNumber !== null) return; // ya está en una publicación
+    if (item.postNumber !== null) return; // ya está en una publicación o escena
     setNotice(null);
     setSelected((prev) => (prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]));
   }
@@ -84,26 +85,28 @@ export function MediaLibrary({
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <p className="text-neutral-600">
           {items.length} {items.length === 1 ? "archivo" : "archivos"}
-          {isFeed ? ` · ${free.length} sin usar` : ""}
+          {` · ${free.length} ${isFeed ? "sin usar" : "sin escena"}`}
         </p>
-        {isFeed ? (
-          <label className="flex items-center gap-2 text-neutral-600">
-            <input type="checkbox" checked={showUsed} onChange={(e) => setShowUsed(e.target.checked)} />
-            Mostrar también los que ya están en publicaciones
-          </label>
-        ) : null}
+        <label className="flex items-center gap-2 text-neutral-600">
+          <input type="checkbox" checked={showUsed} onChange={(e) => setShowUsed(e.target.checked)} />
+          {isFeed ? "Mostrar también los que ya están en publicaciones" : "Mostrar también los que ya están en escenas"}
+        </label>
       </div>
 
       {visible.length === 0 ? (
         <p className="rounded-xl bg-neutral-50 p-6 text-center text-sm text-neutral-500">
-          {items.length === 0 ? "Todavía no hay material. Súbelo arriba." : "Todo el material ya está en publicaciones."}
+          {items.length === 0
+            ? "Todavía no hay material. Súbelo arriba."
+            : isFeed
+              ? "Todo el material ya está en publicaciones."
+              : "Todas las fotos ya están en escenas."}
         </p>
       ) : (
         <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
           {visible.map((item) => {
             const order = selected.indexOf(item.id);
             const isSelected = order >= 0;
-            const locked = item.upload_status !== "complete" || (isFeed && item.postNumber !== null);
+            const locked = item.upload_status !== "complete" || item.postNumber !== null;
             return (
               <li key={item.id}>
                 <button
@@ -125,7 +128,7 @@ export function MediaLibrary({
                   ) : null}
                   {item.postNumber !== null ? (
                     <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white">
-                      Publicación {item.postNumber}
+                      {groupLabel} {item.postNumber}
                     </span>
                   ) : null}
                 </button>
@@ -209,19 +212,57 @@ export function MediaLibrary({
               ) : null}
             </div>
           ) : (
-            <div className="mt-3 flex justify-end">
-              <button
-                type="button"
-                className="btn-danger"
-                disabled={pending}
-                onClick={() => {
-                  if (window.confirm(`¿Eliminar ${n} archivo(s) de la galería definitivamente? No se puede deshacer.`)) {
-                    run(() => deleteAssets({ assetIds: selected }));
-                  }
-                }}
-              >
-                {pending ? "Eliminando…" : `Eliminar ${n} archivo(s)`}
-              </button>
+            <div className="mt-3 space-y-3">
+              <input
+                className="input text-sm"
+                placeholder="Título de la escena (p. ej. Ceremonia, Recepción, Retratos)"
+                value={caption}
+                maxLength={80}
+                onChange={(e) => setCaption(e.target.value)}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="btn-brand"
+                  disabled={pending || !caption.trim()}
+                  onClick={() => run(() => createPostFromAssets({ projectId, assetIds: selected, caption }))}
+                >
+                  {pending ? "Creando…" : `Crear escena (${n})`}
+                </button>
+                {posts.length > 0 ? (
+                  <span className="flex items-center gap-2">
+                    <span className="text-sm text-neutral-500">o añadir a</span>
+                    <select className="input w-auto py-1.5" value={targetPost} onChange={(e) => setTargetPost(e.target.value)}>
+                      {posts.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      disabled={pending || !targetPost}
+                      onClick={() => run(() => addAssetsToPost({ postId: targetPost, assetIds: selected }))}
+                    >
+                      Añadir
+                    </button>
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  className="btn-ghost ml-auto text-red-600"
+                  disabled={pending}
+                  onClick={() => {
+                    if (window.confirm(`¿Eliminar ${n} archivo(s) de la galería definitivamente? No se puede deshacer.`)) {
+                      run(() => deleteAssets({ assetIds: selected }));
+                    }
+                  }}
+                >
+                  Eliminar
+                </button>
+              </div>
+              <p className="text-xs text-neutral-500">Las escenas son opcionales: sin escenas, tu cliente ve todas las fotos juntas.</p>
             </div>
           )}
         </div>

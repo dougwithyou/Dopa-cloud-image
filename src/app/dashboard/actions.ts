@@ -9,6 +9,7 @@ import { sendClientAccess } from "@/lib/invitations";
 import { abortMultipartUpload, deleteObject, deletePrefix, projectPrefix } from "@/lib/r2";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ProjectStatus } from "@/types/database";
+import { validateDesign } from "@/lib/gallery-design";
 
 export type ActionState = { error?: string; message?: string } | null;
 
@@ -254,6 +255,25 @@ export async function addClientToProject(_prev: ActionState, formData: FormData)
     : { error: `${client.name} quedó agregado, pero no se pudo enviar el correo. Usa “Reenviar acceso” en Clientes.` };
 }
 
+/** Guarda el diseño de la galería (editor de diseño). */
+export async function saveGalleryDesign(input: { projectId: string; design: unknown }): Promise<ActionState> {
+  const { supabase, creator } = await ctxOrThrow();
+  const projectId = Id.safeParse(input.projectId);
+  const design = validateDesign(input.design);
+  if (!projectId.success || !design) return { error: "Diseño inválido" };
+  const { data, error } = await supabase
+    .from("projects")
+    .update({ design: design as unknown as Record<string, unknown> })
+    .eq("id", projectId.data)
+    .eq("creator_id", creator.id)
+    .select("id")
+    .maybeSingle();
+  if (error || !data) return { error: "No se pudo guardar el diseño" };
+  revalidatePath(`/design/${projectId.data}`);
+  revalidatePath(`/preview/${projectId.data}`);
+  return { message: "Diseño guardado" };
+}
+
 /** Cambia la plantilla (tipo) del proyecto: galería de fotos o feed de Instagram. */
 export async function updateProjectType(formData: FormData): Promise<void> {
   const { supabase, creator } = await ctxOrThrow();
@@ -439,8 +459,21 @@ export async function createPostFromAssets(input: {
   const projectId = Id.safeParse(input.projectId);
   const assetIds = AssetIds.safeParse(input.assetIds);
   if (!projectId.success || !assetIds.success) return { error: "Selecciona al menos un archivo" };
-  if (assetIds.data.length > MAX_CAROUSEL) return { error: `Un carrusel admite como máximo ${MAX_CAROUSEL} archivos.` };
   const caption = z.string().max(10_000).parse(input.caption ?? "").trim();
+
+  const { data: project } = await supabase
+    .from("projects")
+    .select("type")
+    .eq("id", projectId.data)
+    .eq("creator_id", creator.id)
+    .maybeSingle();
+  if (!project) return { error: "Proyecto no encontrado" };
+  // En una galería, las publicaciones son ESCENAS: sin límite de carrusel.
+  const isScene = project.type === "photo_session";
+  if (!isScene && assetIds.data.length > MAX_CAROUSEL) {
+    return { error: `Un carrusel admite como máximo ${MAX_CAROUSEL} archivos.` };
+  }
+  if (isScene && !caption) return { error: "Escribe el título de la escena" };
 
   // Solo archivos propios, completos y libres (RLS + filtros).
   const { data: files } = await supabase
@@ -488,6 +521,7 @@ export async function createPostFromAssets(input: {
 
   revalidatePath(`/dashboard/projects/${projectId.data}`);
   const n = assetIds.data.length;
+  if (isScene) return { message: `Escena “${caption}” creada con ${n} archivo(s).` };
   return { message: n === 1 ? "Publicación creada." : `Carrusel de ${n} archivos creado.` };
 }
 
@@ -500,15 +534,16 @@ export async function addAssetsToPost(input: { postId: string; assetIds: string[
 
   const { data: post } = await supabase
     .from("posts")
-    .select("id, project_id")
+    .select("id, project_id, projects(type)")
     .eq("id", postId.data)
     .eq("creator_id", creator.id)
     .maybeSingle();
   if (!post) return { error: "Publicación no encontrada" };
+  const isScene = post.projects?.type === "photo_session";
 
   const { data: current } = await supabase.from("assets").select("position").eq("post_id", post.id);
   const count = current?.length ?? 0;
-  if (count + assetIds.data.length > MAX_CAROUSEL) {
+  if (!isScene && count + assetIds.data.length > MAX_CAROUSEL) {
     return { error: `Esa publicación tiene ${count} archivos; un carrusel admite como máximo ${MAX_CAROUSEL}.` };
   }
   const start = (current ?? []).reduce((m, a) => Math.max(m, a.position), -1) + 1;
@@ -528,7 +563,7 @@ export async function addAssetsToPost(input: { postId: string; assetIds: string[
   const failed = results.filter((r) => r.error).length;
   return failed
     ? { error: limitErrorFromDb(results.find((r) => r.error)?.error?.message)?.message ?? "Algunos archivos no se pudieron añadir." }
-    : { message: `Añadidos ${assetIds.data.length} archivo(s) a la publicación.` };
+    : { message: `Añadidos ${assetIds.data.length} archivo(s) a la ${isScene ? "escena" : "publicación"}.` };
 }
 
 /** Quita un archivo de su publicación y lo devuelve a la biblioteca (no lo borra). */

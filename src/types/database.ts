@@ -42,6 +42,8 @@ export type ProjectRow = {
   title: string;
   type: ProjectType;
   status: ProjectStatus;
+  /** Diseño de la plantilla Galería (ver src/lib/gallery-design.ts). */
+  design: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -121,7 +123,7 @@ export type Database = {
       };
       projects: {
         Row: ProjectRow;
-        Insert: Optional<ProjectRow, "id" | "client_id" | "status" | "created_at" | "updated_at">;
+        Insert: Optional<ProjectRow, "id" | "client_id" | "status" | "design" | "created_at" | "updated_at">;
         Update: Partial<ProjectRow>;
         Relationships: [
           {

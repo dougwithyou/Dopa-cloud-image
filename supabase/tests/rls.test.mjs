@@ -433,5 +433,33 @@ await as(U.clientA1, async () => {
 });
 await db.exec(`update public.projects set type = 'monthly_content' where id = '${pA1pub}'`);
 
+// ---------- Diseño de galería y escenas ----------
+await as(U.creatorA, async () => {
+  const d = await db.query(
+    `update public.projects set design = '{"style":"editorial"}' where id = '${pA1draft}' returning design`,
+  );
+  check("Creador puede guardar el diseño de su galería", d.rows[0]?.design?.style === "editorial");
+  check(
+    "Creador no puede cambiar el diseño de proyectos de B",
+    (await db.query(`update public.projects set design = '{}' where id = '${pB1}' returning id`)).rows.length === 0,
+  );
+});
+await as(U.clientA1, async () => {
+  check(
+    "Cliente no puede cambiar el diseño",
+    (await db.query(`update public.projects set design = '{}' returning id`)).rows.length === 0,
+  );
+});
+{
+  // Una escena de galería admite más de 20 archivos.
+  await db.exec(`update public.projects set type = 'photo_session' where id = '${pA1pub}'`);
+  const scene = await db.query(`insert into public.posts (creator_id, project_id, caption) values ('${cA}','${pA1pub}','Ceremonia') returning id`);
+  const sceneId = scene.rows[0].id;
+  const err = await fails(`update public.assets set post_id = '${sceneId}' where r2_key like 'full-%' or r2_key = 'lib1'`);
+  const n = await db.query(`select count(*)::int n from public.assets where post_id = '${sceneId}'`);
+  check("Escena de galería admite más de 20 archivos", err === null && n.rows[0].n === 21, err ?? "");
+  await db.exec(`delete from public.posts where id = '${sceneId}'; update public.projects set type = 'monthly_content' where id = '${pA1pub}'`);
+}
+
 console.log(failures === 0 ? "\nTODAS LAS PRUEBAS PASARON" : `\n${failures} PRUEBAS FALLARON`);
 process.exit(failures === 0 ? 0 : 1);
