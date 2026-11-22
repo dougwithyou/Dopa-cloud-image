@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireCreator } from "@/lib/auth";
 import { PROJECT_STATUS_LABEL, PROJECT_TYPE_LABEL } from "@/lib/format";
-import { ChevronRightIcon, FolderPlusIcon, FoldersIcon, UserPlusIcon } from "@/components/icons";
+import { ChevronRightIcon, FolderPlusIcon, FoldersIcon, MailIcon, UserPlusIcon } from "@/components/icons";
 
 export const metadata = { title: "Inicio" };
 
@@ -23,6 +23,12 @@ const ACTIONS = [
     title: "Proyectos anteriores",
     description: "Revisa, edita y publica tus proyectos.",
     Icon: FoldersIcon,
+  },
+  {
+    href: "/dashboard/contacts",
+    title: "Contactos",
+    description: "Correos captados en tus galerías compartidas.",
+    Icon: MailIcon,
   },
 ] as const;
 
@@ -48,7 +54,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <p className="mt-1 text-neutral-500">¿Qué quieres hacer hoy?</p>
       </div>
 
-      <nav className="grid gap-4 sm:grid-cols-3" aria-label="Acciones principales">
+      <nav className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Acciones principales">
         {ACTIONS.map(({ href, title, description, Icon }) => (
           <Link
             key={href}

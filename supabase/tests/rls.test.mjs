@@ -461,5 +461,50 @@ await as(U.clientA1, async () => {
   await db.exec(`delete from public.posts where id = '${sceneId}'; update public.projects set type = 'monthly_content' where id = '${pA1pub}'`);
 }
 
+// ---------- Enlace público y contactos ----------
+await db.exec(`update public.projects set type = 'photo_session', share_enabled = true, share_token = 'tok-a' where id = '${pA2pub}'`);
+await db.exec(`set role service_role;`);
+const lead1 = await db.query(`select * from public.register_gallery_lead('tok-a','Ana','Pérez','Ana@Mail.com ', true)`);
+const lead2 = await db.query(`select * from public.register_gallery_lead('tok-a','Ana','Pérez','ana@mail.com', false)`);
+check("Registro con enlace activo crea el contacto", lead1.rows.length === 1 && lead1.rows[0].project_id === pA2pub);
+check("Segunda visita del mismo correo no duplica", lead1.rows[0].lead_id === lead2.rows[0].lead_id);
+const leadRow = await db.query(`select email, visits, marketing_consent from public.gallery_leads where id = '${lead1.rows[0].lead_id}'`);
+check(
+  "Correo normalizado, visitas contadas y consentimiento conservado",
+  leadRow.rows[0].email === "ana@mail.com" && leadRow.rows[0].visits === 2 && leadRow.rows[0].marketing_consent === true,
+  JSON.stringify(leadRow.rows),
+);
+check(
+  "Token inexistente no registra",
+  /share_link_not_found/.test(await fails(`select * from public.register_gallery_lead('nope','A','B','a@b.com', false)`)),
+);
+await db.exec(`reset role; update public.projects set share_enabled = false where id = '${pA2pub}'; set role service_role;`);
+check(
+  "Enlace desactivado no registra",
+  /share_link_not_found/.test(await fails(`select * from public.register_gallery_lead('tok-a','A','B','a@b.com', false)`)),
+);
+await db.exec(`reset role;`);
+await as(U.creatorA, async () => {
+  const r = await db.query(`select id from public.gallery_leads`);
+  check("Creador ve sus contactos", r.rows.length === 1);
+  check(
+    "Creador no puede insertar contactos directamente",
+    /permission denied/.test(await fails(`insert into public.gallery_leads (creator_id, first_name, last_name, email) values ('${cA}','x','y','x@y.com')`)),
+  );
+});
+await as(U.creatorB, async () => {
+  check("Otro creador no ve esos contactos", (await db.query(`select id from public.gallery_leads`)).rows.length === 0);
+});
+await as(U.clientA2, async () => {
+  check("Cliente no ve contactos", (await db.query(`select id from public.gallery_leads`)).rows.length === 0);
+});
+await db.exec(`set role anon;`);
+check("anon no puede leer contactos", /permission denied/.test(await fails(`select * from public.gallery_leads`)));
+check(
+  "anon no puede llamar register_gallery_lead",
+  /permission denied/.test(await fails(`select * from public.register_gallery_lead('tok-a','A','B','a@b.com', false)`)),
+);
+await db.exec(`reset role; update public.projects set type = 'monthly_content', share_token = null where id = '${pA2pub}'`);
+
 console.log(failures === 0 ? "\nTODAS LAS PRUEBAS PASARON" : `\n${failures} PRUEBAS FALLARON`);
 process.exit(failures === 0 ? 0 : 1);

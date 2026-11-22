@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { DownloadAllButton } from "@/components/download-all-button";
-import { downloadHref, type FeedMedia } from "@/components/feed-post";
+import { downloadHref as defaultDownloadHref, type FeedMedia } from "@/components/feed-post";
 import { pad, slugify, type ZipEntry } from "@/lib/zip-download";
 import {
   FONTS,
@@ -50,11 +50,13 @@ function Lightbox({
   index,
   onClose,
   onNavigate,
+  hrefFor,
 }: {
   items: FeedMedia[];
   index: number;
   onClose: () => void;
   onNavigate: (i: number) => void;
+  hrefFor: (id: string) => string;
 }) {
   const item = items[index];
   const touchX = useRef<number | null>(null);
@@ -96,7 +98,7 @@ function Lightbox({
         </span>
         <div className="flex items-center gap-2">
           <a
-            href={downloadHref(item.id)}
+            href={hrefFor(item.id)}
             download
             className="inline-flex items-center gap-2 rounded-full border border-white/30 px-3 py-1.5 text-xs hover:bg-white/10"
           >
@@ -237,11 +239,13 @@ function Masonry({
   offset,
   design,
   onOpen,
+  hrefFor,
 }: {
   items: FeedMedia[];
   offset: number;
   design: GalleryDesign;
   onOpen: (index: number) => void;
+  hrefFor: (id: string) => string;
 }) {
   const { ref, count: columnCount } = useColumnCount(design.size);
   const gap = GAP_PX[design.spacing] ?? 10;
@@ -266,7 +270,7 @@ function Masonry({
                 )}
               </button>
               <a
-                href={downloadHref(m.id)}
+                href={hrefFor(m.id)}
                 download
                 aria-label={`Descargar ${m.file_name}`}
                 className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-neutral-900 opacity-100 shadow transition sm:opacity-0 sm:group-hover:opacity-100"
@@ -293,6 +297,7 @@ export function PhotoGalleryTemplate({
   items,
   scenes = [],
   design,
+  downloadBase,
 }: {
   title: string;
   authorName: string;
@@ -302,9 +307,15 @@ export function PhotoGalleryTemplate({
   /** Escenas (publicaciones del proyecto) con sus fotos. */
   scenes?: GalleryScene[];
   design: GalleryDesign;
+  /**
+   * Ruta base de descarga para visitantes sin cuenta (enlace público), p. ej.
+   * "/api/share/TOKEN/download/". Por defecto, la descarga con sesión.
+   */
+  downloadBase?: string;
 }) {
   const palette = PALETTES[design.palette];
   const [open, setOpen] = useState<number | null>(null);
+  const hrefFor = (id: string) => (downloadBase ? `${downloadBase}${id}` : defaultDownloadHref(id));
 
   // Secciones: escenas con fotos y, al final, las fotos sin escena.
   const withMedia = scenes.filter((s) => s.media.length > 0);
@@ -324,7 +335,7 @@ export function PhotoGalleryTemplate({
       name: `${multi ? `${pad(si + 1)}-${slugify(s.title)}/` : ""}${pad(i + 1, 3)}-${m.file_name}`,
       url: m.url,
       size: m.size_bytes,
-      downloadHref: downloadHref(m.id),
+      downloadHref: hrefFor(m.id),
     })),
   );
   const ts = titleStyle(design);
@@ -381,7 +392,7 @@ export function PhotoGalleryTemplate({
                     {s.title}
                   </h2>
                 ) : null}
-                <Masonry items={s.media} offset={start} design={design} onOpen={setOpen} />
+                <Masonry items={s.media} offset={start} design={design} onOpen={setOpen} hrefFor={hrefFor} />
               </div>
             );
           })
@@ -392,7 +403,7 @@ export function PhotoGalleryTemplate({
         {authorName}
       </footer>
 
-      {open !== null ? <Lightbox items={ordered} index={open} onClose={() => setOpen(null)} onNavigate={setOpen} /> : null}
+      {open !== null ? <Lightbox items={ordered} index={open} onClose={() => setOpen(null)} onNavigate={setOpen} hrefFor={hrefFor} /> : null}
     </div>
   );
 }

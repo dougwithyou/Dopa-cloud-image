@@ -10,6 +10,7 @@ import { abortMultipartUpload, deleteObject, deletePrefix, projectPrefix } from 
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ProjectStatus } from "@/types/database";
 import { validateDesign } from "@/lib/gallery-design";
+import { newShareToken } from "@/lib/share";
 
 export type ActionState = { error?: string; message?: string } | null;
 
@@ -253,6 +254,55 @@ export async function addClientToProject(_prev: ActionState, formData: FormData)
   return sent
     ? { message: `${client.name} quedó agregado. Le enviamos su acceso a ${client.email}.` }
     : { error: `${client.name} quedó agregado, pero no se pudo enviar el correo. Usa “Reenviar acceso” en Clientes.` };
+}
+
+// ---------------------------------------------------------------------------
+// Enlace público de galería y contactos
+// ---------------------------------------------------------------------------
+
+/** Activa el enlace público de una galería (lo genera la primera vez). */
+export async function enableShareLink(formData: FormData): Promise<void> {
+  const { supabase, creator } = await ctxOrThrow();
+  const id = Id.parse(formData.get("projectId"));
+  const { data: project } = await supabase
+    .from("projects")
+    .select("id, type, share_token")
+    .eq("id", id)
+    .eq("creator_id", creator.id)
+    .maybeSingle();
+  if (!project || project.type !== "photo_session") return;
+  await supabase
+    .from("projects")
+    .update({ share_enabled: true, share_token: project.share_token ?? newShareToken() })
+    .eq("id", project.id);
+  revalidatePath(`/dashboard/projects/${project.id}`);
+}
+
+export async function disableShareLink(formData: FormData): Promise<void> {
+  const { supabase, creator } = await ctxOrThrow();
+  const id = Id.parse(formData.get("projectId"));
+  await supabase.from("projects").update({ share_enabled: false }).eq("id", id).eq("creator_id", creator.id);
+  revalidatePath(`/dashboard/projects/${id}`);
+}
+
+/** Genera un enlace nuevo: el anterior deja de funcionar. */
+export async function regenerateShareLink(formData: FormData): Promise<void> {
+  const { supabase, creator } = await ctxOrThrow();
+  const id = Id.parse(formData.get("projectId"));
+  await supabase
+    .from("projects")
+    .update({ share_token: newShareToken(), share_enabled: true })
+    .eq("id", id)
+    .eq("creator_id", creator.id)
+    .eq("type", "photo_session");
+  revalidatePath(`/dashboard/projects/${id}`);
+}
+
+export async function deleteLead(formData: FormData): Promise<void> {
+  const { supabase, creator } = await ctxOrThrow();
+  const id = Id.parse(formData.get("leadId"));
+  await supabase.from("gallery_leads").delete().eq("id", id).eq("creator_id", creator.id);
+  revalidatePath("/dashboard/contacts");
 }
 
 /** Guarda el diseño de la galería (editor de diseño). */

@@ -8,9 +8,19 @@ import { PROJECT_STATUS_LABEL, PROJECT_TYPE_HELP, PROJECT_TYPE_LABEL } from "@/l
 import { Uploader } from "@/components/uploader";
 import { SubmitButton } from "@/components/submit-button";
 import { AddClientToProjectForm } from "../../forms";
-import { deleteProject, removeClientFromProject, updateProjectStatus, updateProjectType } from "../../actions";
+import {
+  deleteProject,
+  disableShareLink,
+  enableShareLink,
+  regenerateShareLink,
+  removeClientFromProject,
+  updateProjectStatus,
+  updateProjectType,
+} from "../../actions";
+import { CopyButton } from "@/components/copy-button";
+import { shareUrl } from "@/lib/share";
 import { PostCard, type EditorAsset, type EditorPost } from "./post-card";
-import { EyeIcon, ImageIcon } from "@/components/icons";
+import { EyeIcon, ImageIcon, LinkIcon } from "@/components/icons";
 import { MediaLibrary, type LibraryItem } from "./media-library";
 
 export const metadata = { title: "Proyecto" };
@@ -21,12 +31,16 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
 
   const { data: project } = await supabase
     .from("projects")
-    .select("id, title, type, status, client_id, clients(name, email, user_id, invited_at)")
+    .select("id, title, type, status, client_id, share_enabled, share_token, clients(name, email, user_id, invited_at)")
     .eq("id", projectId)
     .maybeSingle();
   if (!project) notFound();
 
-  const { data: clients } = await supabase.from("clients").select("id, name, email").order("name");
+  const [{ data: clients }, { count: leadCountRaw }] = await Promise.all([
+    supabase.from("clients").select("id, name, email").order("name"),
+    supabase.from("gallery_leads").select("id", { count: "exact", head: true }).eq("project_id", project.id),
+  ]);
+  const leadCount = leadCountRaw ?? 0;
   const client = project.clients;
   const atClientLimit = creator.client_limit !== null && (clients?.length ?? 0) >= creator.client_limit;
   const newClientBlocked = !canUpload(creator)
@@ -172,6 +186,59 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
           para ver exactamente lo que verá tu cliente.
         </p>
       </section>
+
+      {project.type === "photo_session" ? (
+        <section className="card p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 font-semibold">
+                <LinkIcon className="h-4 w-4" /> Compartir por enlace
+              </h2>
+              <p className="mt-1 max-w-xl text-sm text-neutral-500">
+                Cualquiera con el enlace puede ver la galería después de dejar su nombre, apellido y correo. Los datos se
+                guardan en{" "}
+                <Link href="/dashboard/contacts" className="font-semibold text-neutral-900 underline">
+                  Contactos
+                </Link>
+                {leadCount > 0 ? ` (${leadCount} ${leadCount === 1 ? "persona" : "personas"} desde esta galería)` : ""}.
+              </p>
+            </div>
+            {project.share_enabled ? (
+              <form action={disableShareLink}>
+                <input type="hidden" name="projectId" value={project.id} />
+                <SubmitButton className="btn-secondary px-3 py-1.5 text-xs" pendingLabel="…">
+                  Desactivar
+                </SubmitButton>
+              </form>
+            ) : (
+              <form action={enableShareLink}>
+                <input type="hidden" name="projectId" value={project.id} />
+                <SubmitButton className="btn-primary" pendingLabel="Activando…">
+                  <LinkIcon className="h-4 w-4" /> Activar enlace
+                </SubmitButton>
+              </form>
+            )}
+          </div>
+          {project.share_enabled && project.share_token ? (
+            <div className="mt-4 space-y-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input readOnly value={shareUrl(project.share_token)} className="input flex-1 font-mono text-xs" aria-label="Enlace de la galería" />
+                <CopyButton text={shareUrl(project.share_token)} className="btn-primary" label="Copiar enlace" />
+              </div>
+              <form action={regenerateShareLink}>
+                <input type="hidden" name="projectId" value={project.id} />
+                <SubmitButton
+                  className="btn-ghost px-0 text-xs text-neutral-500"
+                  pendingLabel="…"
+                  confirm="¿Generar un enlace nuevo? El enlace actual dejará de funcionar."
+                >
+                  Generar un enlace nuevo
+                </SubmitButton>
+              </form>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="card p-5">
         <h2 className="mb-1 font-semibold">Cliente</h2>

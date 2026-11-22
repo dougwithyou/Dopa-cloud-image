@@ -17,11 +17,14 @@ export function ProjectView({
   authorName,
   posts,
   library,
+  downloadBase,
 }: {
   project: { title: string; type: ProjectType; created_at: string; design?: unknown };
   authorName: string;
   posts: FeedPostData[];
   library: FeedMedia[];
+  /** Ruta de descarga para visitantes del enlace público. */
+  downloadBase?: string;
 }) {
   if (project.type === "photo_session") {
     return (
@@ -32,6 +35,7 @@ export function ProjectView({
         items={library}
         scenes={posts.map((p, i) => ({ id: p.id, title: sceneTitle(p.caption, i), media: p.media }))}
         design={parseDesign(project.design)}
+        downloadBase={downloadBase}
       />
     );
   }

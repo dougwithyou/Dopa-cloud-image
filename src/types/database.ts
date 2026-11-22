@@ -44,6 +44,9 @@ export type ProjectRow = {
   status: ProjectStatus;
   /** Diseño de la plantilla Galería (ver src/lib/gallery-design.ts). */
   design: Record<string, unknown>;
+  /** Enlace público /g/{share_token} (solo galerías). */
+  share_enabled: boolean;
+  share_token: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -74,6 +77,21 @@ export type AssetRow = {
   position: number;
   created_at: string;
   completed_at: string | null;
+}
+
+/** Contacto registrado al entrar a una galería por enlace. */
+export type GalleryLeadRow = {
+  id: string;
+  creator_id: string;
+  project_id: string | null;
+  first_name: string;
+  last_name: string;
+  email: string;
+  marketing_consent: boolean;
+  consent_at: string | null;
+  visits: number;
+  created_at: string;
+  last_visit_at: string;
 }
 
 export type StripeEventRow = {
@@ -123,7 +141,10 @@ export type Database = {
       };
       projects: {
         Row: ProjectRow;
-        Insert: Optional<ProjectRow, "id" | "client_id" | "status" | "design" | "created_at" | "updated_at">;
+        Insert: Optional<
+          ProjectRow,
+          "id" | "client_id" | "status" | "design" | "share_enabled" | "share_token" | "created_at" | "updated_at"
+        >;
         Update: Partial<ProjectRow>;
         Relationships: [
           {
@@ -173,6 +194,20 @@ export type Database = {
           },
         ];
       };
+      gallery_leads: {
+        Row: GalleryLeadRow;
+        Insert: Optional<GalleryLeadRow, "id" | "project_id" | "marketing_consent" | "consent_at" | "visits" | "created_at" | "last_visit_at">;
+        Update: Partial<GalleryLeadRow>;
+        Relationships: [
+          {
+            foreignKeyName: "gallery_leads_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       stripe_events: {
         Row: StripeEventRow;
         Insert: Optional<StripeEventRow, "received_at" | "processed_at">;
@@ -190,6 +225,10 @@ export type Database = {
         Returns: { id: string; business_name: string }[];
       };
       my_storage_used: { Args: Record<string, never>; Returns: number };
+      register_gallery_lead: {
+        Args: { p_token: string; p_first_name: string; p_last_name: string; p_email: string; p_consent: boolean };
+        Returns: { lead_id: string; project_id: string }[];
+      };
       reserve_asset_upload: {
         Args: {
           p_asset_id: string;

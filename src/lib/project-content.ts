@@ -1,5 +1,6 @@
 import "server-only";
-import type { ServerSupabase } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database";
 import { signDownloadUrl } from "@/lib/r2";
 
 export interface ContentMedia {
@@ -30,7 +31,7 @@ export interface ProjectContent {
  * publicados y, en un feed, solo archivos que están en publicaciones;
  * creador: todo lo suyo).
  */
-export async function loadProjectContent(supabase: ServerSupabase, projectId: string): Promise<ProjectContent> {
+export async function loadProjectContent(supabase: SupabaseClient<Database>, projectId: string): Promise<ProjectContent> {
   const [{ data: postRows }, { data: assetRows }] = await Promise.all([
     supabase.from("posts").select("id, caption, position, created_at").eq("project_id", projectId).order("position").order("created_at"),
     supabase
