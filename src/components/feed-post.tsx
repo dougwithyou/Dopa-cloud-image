@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { DownloadAllButton } from "@/components/download-all-button";
 import { MediaCarousel } from "@/components/media-carousel";
+import { SaveToPhotosButton, useSaveToPhotosPlatform } from "@/components/save-to-photos";
 import { pad, type ZipEntry } from "@/lib/zip-download";
 
 export interface FeedMedia {
@@ -51,15 +52,31 @@ export function Avatar({ name, size = "sm" }: { name: string; size?: "sm" | "lg"
 export function PostActions({ post, current, zipBase }: { post: FeedPostData; current: number; zipBase: string }) {
   const count = post.media.length;
   const active = post.media[current];
+  // En el teléfono, lo principal es guardar en Fotos; la descarga va a Archivos.
+  const mobile = useSaveToPhotosPlatform() !== null;
   return (
     <div className="flex flex-wrap gap-2">
       {active ? (
-        <a href={downloadHref(active.id)} className="btn-primary px-3 py-1.5 text-xs" download>
-          ↓ Descargar {active.kind === "video" ? "video" : "foto"}
+        <SaveToPhotosButton
+          media={[active]}
+          label={`Guardar ${active.kind === "video" ? "video" : "foto"}${count > 1 ? ` ${current + 1}/${count}` : ""} en Fotos`}
+          className="btn-primary px-3 py-1.5 text-xs"
+        />
+      ) : null}
+      {count > 1 ? (
+        <SaveToPhotosButton
+          media={post.media}
+          label={`Guardar carrusel en Fotos (${count})`}
+          className="btn-secondary px-3 py-1.5 text-xs"
+        />
+      ) : null}
+      {active ? (
+        <a href={downloadHref(active.id)} className={`${mobile ? "btn-secondary" : "btn-primary"} px-3 py-1.5 text-xs`} download>
+          ↓ {mobile ? "Archivos" : `Descargar ${active.kind === "video" ? "video" : "foto"}`}
           {count > 1 ? ` ${current + 1}/${count}` : ""}
         </a>
       ) : null}
-      {count > 1 ? (
+      {count > 1 && !mobile ? (
         <DownloadAllButton
           entries={postZipEntries(post)}
           zipName={`${zipBase}.zip`}

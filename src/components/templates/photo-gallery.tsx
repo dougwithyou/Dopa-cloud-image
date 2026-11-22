@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { DownloadAllButton } from "@/components/download-all-button";
 import { downloadHref as defaultDownloadHref, type FeedMedia } from "@/components/feed-post";
 import { pad, slugify, type ZipEntry } from "@/lib/zip-download";
+import { SaveToPhotosButton, useSaveToPhotosPlatform } from "@/components/save-to-photos";
 import {
   FONTS,
   GAP_PX,
@@ -97,6 +98,10 @@ function Lightbox({
           {index + 1} / {items.length}
         </span>
         <div className="flex items-center gap-2">
+          <SaveToPhotosButton
+            media={[item]}
+            className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-neutral-900"
+          />
           <a
             href={hrefFor(item.id)}
             download
@@ -248,6 +253,9 @@ function Masonry({
   hrefFor: (id: string) => string;
 }) {
   const { ref, count: columnCount } = useColumnCount(design.size);
+  // En el teléfono se guarda desde el visor ("Guardar en Fotos"); el ícono de
+  // descarga directa enviaría el archivo a la app Archivos.
+  const mobile = useSaveToPhotosPlatform() !== null;
   const gap = GAP_PX[design.spacing] ?? 10;
   const columns = Array.from({ length: columnCount }, (_, c) =>
     items.map((m, i) => ({ m, i })).filter(({ i }) => i % columnCount === c),
@@ -269,6 +277,7 @@ function Masonry({
                   </span>
                 )}
               </button>
+              {mobile ? null : (
               <a
                 href={hrefFor(m.id)}
                 download
@@ -277,6 +286,7 @@ function Masonry({
               >
                 <DownloadIcon />
               </a>
+              )}
             </div>
           ))}
         </div>
@@ -357,6 +367,12 @@ export function PhotoGalleryTemplate({
               {ordered.length} {ordered.length === 1 ? "archivo" : "archivos"} · {authorName}
             </p>
           </div>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          <SaveToPhotosButton
+            media={ordered}
+            label="Guardar en Fotos"
+            className="btn rounded-none border border-current px-3 py-2 text-[11px] uppercase tracking-widest"
+          />
           <DownloadAllButton
             entries={entries}
             zipName={`${zipPrefix}.zip`}
@@ -364,6 +380,7 @@ export function PhotoGalleryTemplate({
             className="btn shrink-0 rounded-none px-3 py-2 text-[11px] uppercase tracking-widest sm:px-4 sm:text-xs"
             style={{ background: palette.text, color: palette.bg }}
           />
+          </div>
         </div>
         {multi ? (
           <nav className="mx-auto flex max-w-7xl gap-6 overflow-x-auto px-4 pb-2 text-sm sm:px-8" aria-label="Escenas">
