@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ImageIcon } from "@/components/icons";
 import { requireUser } from "@/lib/auth";
 import { signDownloadUrl } from "@/lib/r2";
 import { formatDate, PROJECT_TYPE_LABEL } from "@/lib/format";
@@ -55,7 +56,9 @@ export default async function PortalPage() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={coverUrls.get(p.id)} alt="" className="h-full w-full object-cover transition group-hover:scale-105" />
                   ) : (
-                    <div className="flex h-full items-center justify-center text-3xl">📁</div>
+                    <div className="flex h-full items-center justify-center text-neutral-400">
+                      <ImageIcon className="h-10 w-10" />
+                    </div>
                   )}
                 </div>
                 <div className="p-3">

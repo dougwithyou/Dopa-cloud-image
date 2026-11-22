@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSession, homePathFor } from "@/lib/auth";
 import { APP_NAME } from "@/lib/env";
 import { PLANS, PLAN_IDS, TRIAL_DAYS, formatPrice } from "@/lib/plans";
+import { CheckIcon } from "@/components/icons";
 
 export default async function Home() {
   const { supabase, user } = await getSession();
@@ -42,9 +43,9 @@ export default async function Home() {
               </p>
               <ul className="mt-4 space-y-2 text-sm text-neutral-600">
                 {plan.highlights.map((h) => (
-                  <li key={h}>✓ {h}</li>
+                  <li key={h} className="flex items-start gap-1.5"><CheckIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-green-600" />{h}</li>
                 ))}
-                <li>✓ {TRIAL_DAYS} días de prueba</li>
+                <li className="flex items-start gap-1.5"><CheckIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-green-600" />{TRIAL_DAYS} días de prueba</li>
               </ul>
             </div>
           );

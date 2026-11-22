@@ -1,89 +1,92 @@
 import Link from "next/link";
 import { requireCreator } from "@/lib/auth";
-import { getUsage } from "@/lib/limits";
-import { PLANS, formatPrice } from "@/lib/plans";
-import { STATUS_LABEL, trialDaysLeft } from "@/lib/subscription";
-import { formatBytes, formatDate, PROJECT_STATUS_LABEL } from "@/lib/format";
-import { UsageMeter } from "@/components/usage-meter";
+import { PROJECT_STATUS_LABEL, PROJECT_TYPE_LABEL } from "@/lib/format";
+import { ChevronRightIcon, FolderPlusIcon, FoldersIcon, UserPlusIcon } from "@/components/icons";
 
-export const metadata = { title: "Resumen" };
+export const metadata = { title: "Inicio" };
+
+const ACTIONS = [
+  {
+    href: "/dashboard/clients",
+    title: "Agregar cliente",
+    description: "Registra a un cliente y gestiona su acceso.",
+    Icon: UserPlusIcon,
+  },
+  {
+    href: "/dashboard/projects/new",
+    title: "Nuevo proyecto",
+    description: "Crea una galería o un feed y sube el material.",
+    Icon: FolderPlusIcon,
+  },
+  {
+    href: "/dashboard/projects",
+    title: "Proyectos anteriores",
+    description: "Revisa, edita y publica tus proyectos.",
+    Icon: FoldersIcon,
+  },
+] as const;
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ checkout?: string }> }) {
   const { supabase, creator } = await requireCreator();
   const { checkout } = await searchParams;
-  const [usage, projects] = await Promise.all([
-    getUsage(creator.id),
-    supabase
-      .from("projects")
-      .select("id, title, status, created_at, clients(name)")
-      .order("created_at", { ascending: false })
-      .limit(5),
-  ]);
-  const plan = PLANS[creator.plan];
-  const days = trialDaysLeft(creator);
+  const { data: recent } = await supabase
+    .from("projects")
+    .select("id, title, type, status, clients(name)")
+    .order("updated_at", { ascending: false })
+    .limit(4);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       {checkout === "success" ? (
         <p className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-800">
-          ¡Listo! Tu prueba de 30 días comenzó. Empieza creando tu primer proyecto.
+          ¡Listo! Tu prueba gratuita comenzó. Empieza creando tu primer proyecto.
         </p>
       ) : null}
 
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Hola, {creator.business_name}</h1>
-        <p className="text-neutral-500">Esto es lo que pasa en tu estudio.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Hola, {creator.business_name}</h1>
+        <p className="mt-1 text-neutral-500">¿Qué quieres hacer hoy?</p>
       </div>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <div className="card p-5">
-          <p className="text-sm text-neutral-500">Plan</p>
-          <p className="mt-1 text-xl font-semibold">
-            {plan.name} · {formatPrice(plan)}/mes
-          </p>
-          <p className="mt-2 text-sm">
-            <span className="badge bg-neutral-100 text-neutral-700">{STATUS_LABEL[creator.subscription_status]}</span>
-            {days !== null ? (
-              <span className="ml-2 text-neutral-600">
-                {days} {days === 1 ? "día" : "días"} de prueba · cobro el {formatDate(creator.trial_ends_at)}
-              </span>
-            ) : null}
-          </p>
-        </div>
-        <div className="card p-5 md:col-span-2 space-y-4">
-          <UsageMeter label="Almacenamiento" used={usage.storageUsedBytes} limit={creator.storage_limit_bytes} format={formatBytes} />
-          <UsageMeter label="Clientes" used={usage.clientCount} limit={creator.client_limit} />
-        </div>
-      </section>
-
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-semibold">Proyectos recientes</h2>
-          <Link href="/dashboard/projects" className="text-sm text-neutral-500 hover:text-neutral-900">
-            Ver todos
+      <nav className="grid gap-4 sm:grid-cols-3" aria-label="Acciones principales">
+        {ACTIONS.map(({ href, title, description, Icon }) => (
+          <Link
+            key={href}
+            href={href}
+            className="group flex flex-row items-center gap-4 rounded-2xl border border-neutral-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-neutral-900 hover:shadow-md sm:flex-col sm:items-start sm:p-6"
+          >
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-neutral-900 text-white transition group-hover:bg-brand-500 sm:h-14 sm:w-14">
+              <Icon className="h-6 w-6 sm:h-7 sm:w-7" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-base font-semibold sm:text-lg">{title}</span>
+              <span className="mt-0.5 block text-sm text-neutral-500">{description}</span>
+            </span>
           </Link>
-        </div>
-        {projects.data && projects.data.length > 0 ? (
-          <ul className="card divide-y divide-neutral-100">
-            {projects.data.map((p) => (
+        ))}
+      </nav>
+
+      {recent && recent.length > 0 ? (
+        <section>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">Continuar donde lo dejaste</h2>
+          <ul className="divide-y divide-neutral-100 rounded-2xl border border-neutral-200 bg-white">
+            {recent.map((p) => (
               <li key={p.id}>
-                <Link href={`/dashboard/projects/${p.id}`} className="flex items-center justify-between px-5 py-3 hover:bg-neutral-50">
-                  <span>
-                    <span className="font-medium">{p.title}</span>
-                    <span className="ml-2 text-sm text-neutral-500">{p.clients?.name ?? "Sin cliente"}</span>
+                <Link href={`/dashboard/projects/${p.id}`} className="flex items-center gap-3 px-5 py-3.5 hover:bg-neutral-50">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{p.title}</span>
+                    <span className="block truncate text-xs text-neutral-500">
+                      {p.clients?.name ?? "Sin cliente"} · {PROJECT_TYPE_LABEL[p.type]}
+                    </span>
                   </span>
-                  <span className="text-xs text-neutral-500">{PROJECT_STATUS_LABEL[p.status]}</span>
+                  <span className="shrink-0 text-xs text-neutral-500">{PROJECT_STATUS_LABEL[p.status]}</span>
+                  <ChevronRightIcon className="h-4 w-4 shrink-0 text-neutral-400" />
                 </Link>
               </li>
             ))}
           </ul>
-        ) : (
-          <div className="card p-8 text-center text-sm text-neutral-500">
-            Aún no tienes proyectos.{" "}
-            <Link href="/dashboard/projects" className="font-semibold text-neutral-900">Crea el primero</Link> y agrégale un cliente.
-          </div>
-        )}
-      </section>
+        </section>
+      ) : null}
     </div>
   );
 }

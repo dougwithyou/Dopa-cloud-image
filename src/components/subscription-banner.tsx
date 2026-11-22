@@ -1,20 +1,11 @@
 import Link from "next/link";
 import type { CreatorRow } from "@/types/database";
-import { trialDaysLeft } from "@/lib/subscription";
 import { formatDate } from "@/lib/format";
 
 export function SubscriptionBanner({ creator }: { creator: CreatorRow }) {
-  const days = trialDaysLeft(creator);
+  // Solo se avisa de problemas de pago (bloquean las subidas). La información
+  // de la prueba y del plan vive en Configuración.
   const status = creator.subscription_status;
-
-  if (status === "trialing" && days !== null) {
-    return (
-      <div className="bg-neutral-900 px-4 py-2 text-center text-sm text-white">
-        {days === 0 ? "Tu prueba termina hoy" : `Te quedan ${days} ${days === 1 ? "día" : "días"} de prueba`} ·{" "}
-        <Link href="/dashboard/billing" className="underline">Ver suscripción</Link>
-      </div>
-    );
-  }
 
   if (status === "past_due" || status === "canceled" || status === "incomplete") {
     const message =

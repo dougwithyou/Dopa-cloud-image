@@ -1,4 +1,5 @@
 import { PLANS, PLAN_IDS, formatPrice, type PlanId } from "@/lib/plans";
+import { CheckIcon } from "@/components/icons";
 
 /** Tarjetas de selección de plan (radio inputs nativos, sin JS). */
 export function PlanPicker({ defaultPlan = "medium" }: { defaultPlan?: PlanId }) {
@@ -20,7 +21,7 @@ export function PlanPicker({ defaultPlan = "medium" }: { defaultPlan?: PlanId })
             </span>
             <ul className="space-y-1 text-xs text-neutral-600">
               {plan.highlights.map((h) => (
-                <li key={h}>✓ {h}</li>
+                <li key={h} className="flex items-start gap-1.5"><CheckIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-green-600" />{h}</li>
               ))}
             </ul>
           </label>

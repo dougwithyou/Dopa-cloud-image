@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requireCreator } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
 import { SubmitButton } from "@/components/submit-button";
+import { canUpload } from "@/lib/subscription";
+import { CreateClientForm } from "../forms";
 import { deleteClient, resendAccess } from "../actions";
 
 export const metadata = { title: "Clientes" };
@@ -14,6 +16,12 @@ export default async function ClientsPage() {
     .order("created_at", { ascending: false });
 
   const count = clients?.length ?? 0;
+  const atLimit = creator.client_limit !== null && count >= creator.client_limit;
+  const disabledReason = !canUpload(creator)
+    ? "Tu suscripción no está activa: no puedes agregar clientes nuevos."
+    : atLimit
+      ? `Tu plan permite ${creator.client_limit} clientes. Cambia de plan en Configuración para agregar más.`
+      : undefined;
 
   return (
     <div className="space-y-8">
@@ -24,11 +32,15 @@ export default async function ClientsPage() {
         </p>
       </div>
 
-      <div className="rounded-2xl border border-neutral-200 bg-white p-5 text-sm text-neutral-600">
-        Para agregar un cliente, abre un{" "}
-        <Link href="/dashboard/projects" className="font-semibold text-neutral-900">proyecto</Link> y pulsa{" "}
-        <strong>Agregar cliente</strong>. Recibirá su acceso por correo cuando publiques el proyecto.
-      </div>
+      <section className="card p-5">
+        <h2 className="mb-1 font-semibold">Agregar cliente</h2>
+        <p className="mb-4 text-sm text-neutral-500">
+          Después asígnalo a un{" "}
+          <Link href="/dashboard/projects" className="font-semibold text-neutral-900">proyecto</Link>. Recibirá su
+          acceso por correo cuando publiques ese proyecto.
+        </p>
+        <CreateClientForm disabledReason={disabledReason} />
+      </section>
 
       <section>
         {clients && clients.length > 0 ? (
@@ -81,7 +93,7 @@ export default async function ClientsPage() {
           </ul>
         ) : (
           <div className="card p-8 text-center text-sm text-neutral-500">
-            Todavía no tienes clientes. Agrégalos desde tus proyectos.
+            Todavía no tienes clientes.
           </div>
         )}
       </section>

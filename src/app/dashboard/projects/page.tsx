@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { requireCreator } from "@/lib/auth";
 import { formatDate, PROJECT_STATUS_LABEL, PROJECT_TYPE_LABEL } from "@/lib/format";
-import { CreateProjectForm } from "../forms";
+import { FolderPlusIcon } from "@/components/icons";
 
-export const metadata = { title: "Proyectos" };
+export const metadata = { title: "Proyectos anteriores" };
 
 const STATUS_STYLE = {
   draft: "bg-neutral-100 text-neutral-700",
@@ -20,12 +20,12 @@ export default async function ProjectsPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold tracking-tight">Proyectos</h1>
-
-      <section className="card p-5">
-        <h2 className="mb-4 font-semibold">Nuevo proyecto</h2>
-        <CreateProjectForm />
-      </section>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold tracking-tight">Tus proyectos</h1>
+        <Link href="/dashboard/projects/new" className="btn-primary">
+          <FolderPlusIcon className="h-4 w-4" /> Nuevo proyecto
+        </Link>
+      </div>
 
       {projects && projects.length > 0 ? (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -50,7 +50,10 @@ export default async function ProjectsPage() {
           })}
         </ul>
       ) : (
-        <div className="card p-8 text-center text-sm text-neutral-500">Aún no hay proyectos.</div>
+        <div className="card p-8 text-center text-sm text-neutral-500">
+          Aún no hay proyectos.{" "}
+          <Link href="/dashboard/projects/new" className="font-semibold text-neutral-900">Crea el primero</Link>.
+        </div>
       )}
     </div>
   );

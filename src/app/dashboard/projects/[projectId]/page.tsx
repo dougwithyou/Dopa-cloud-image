@@ -10,6 +10,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { AddClientToProjectForm } from "../../forms";
 import { deleteProject, removeClientFromProject, updateProjectStatus, updateProjectType } from "../../actions";
 import { PostCard, type EditorAsset, type EditorPost } from "./post-card";
+import { EyeIcon } from "@/components/icons";
 import { MediaLibrary, type LibraryItem } from "./media-library";
 
 export const metadata = { title: "Proyecto" };
@@ -105,7 +106,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
           </div>
           <div className="flex flex-wrap gap-2">
             <Link href={`/preview/${project.id}`} target="_blank" className="btn-secondary">
-              👁 Vista previa
+              <EyeIcon className="h-4 w-4" /> Vista previa
             </Link>
             {(["draft", "published", "archived"] as const)
               .filter((s) => s !== project.status)

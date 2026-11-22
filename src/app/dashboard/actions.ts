@@ -75,6 +75,35 @@ async function sendAccess(
   }
 }
 
+/**
+ * Registra un cliente (nombre + correo) sin asignarlo aún a un proyecto. Su
+ * acceso se envía cuando se le agrega a un proyecto publicado o con
+ * "Enviar acceso".
+ */
+export async function createClient(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const { supabase, creator } = await ctxOrThrow();
+  const parsed = z
+    .object({
+      name: z.string().trim().min(1, "Escribe el nombre del cliente").max(120),
+      email: z.email("Correo inválido").transform((v) => v.trim().toLowerCase()),
+    })
+    .safeParse({ name: formData.get("name"), email: formData.get("email") });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+
+  const limit = await checkClientLimit(creator);
+  if (!limit.ok) return { error: limit.message };
+
+  const { error } = await supabase
+    .from("clients")
+    .insert({ creator_id: creator.id, name: parsed.data.name, email: parsed.data.email });
+  if (error) {
+    if (error.code === "23505") return { error: "Ya tienes un cliente con ese correo" };
+    return { error: limitErrorFromDb(error.message)?.message ?? "No se pudo agregar el cliente" };
+  }
+  revalidatePath("/dashboard", "layout");
+  return { message: `${parsed.data.name} quedó agregado. Ahora puedes asignarlo a un proyecto.` };
+}
+
 /** Reenvía el enlace de acceso a un cliente que todavía no ha entrado. */
 export async function resendAccess(formData: FormData): Promise<void> {
   const { supabase, creator, user } = await ctxOrThrow();
@@ -108,14 +137,25 @@ export async function createProject(_prev: ActionState, formData: FormData): Pro
     .object({
       title: z.string().trim().min(1, "Ingresa un título").max(160),
       type: z.enum(["photo_session", "monthly_content"]),
+      clientId: z.union([Id, z.literal("")]).optional(),
     })
-    .safeParse({ title: formData.get("title"), type: formData.get("type") });
+    .safeParse({
+      title: formData.get("title"),
+      type: formData.get("type"),
+      clientId: formData.get("clientId") ?? undefined,
+    });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
-  // El cliente se agrega después, desde la página del proyecto.
+  // El cliente es opcional (también se puede agregar después). La FK compuesta
+  // (creator_id, client_id) impide usar un cliente de otro creador.
   const { data, error } = await supabase
     .from("projects")
-    .insert({ creator_id: creator.id, title: parsed.data.title, type: parsed.data.type })
+    .insert({
+      creator_id: creator.id,
+      title: parsed.data.title,
+      type: parsed.data.type,
+      client_id: parsed.data.clientId || null,
+    })
     .select("id")
     .single();
   if (error || !data) return { error: "No se pudo crear el proyecto" };

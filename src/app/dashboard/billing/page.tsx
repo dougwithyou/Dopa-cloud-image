@@ -1,12 +1,15 @@
 import { requireCreator } from "@/lib/auth";
 import { PLANS, formatPrice } from "@/lib/plans";
 import { STATUS_LABEL, trialDaysLeft } from "@/lib/subscription";
-import { formatDate } from "@/lib/format";
+import { formatBytes, formatDate } from "@/lib/format";
+import { getUsage } from "@/lib/limits";
+import { UsageMeter } from "@/components/usage-meter";
 import { PlanPicker } from "@/components/plan-picker";
 import { SubmitButton } from "@/components/submit-button";
 import { BusinessNameForm } from "../forms";
+import { CheckIcon } from "@/components/icons";
 
-export const metadata = { title: "Suscripción" };
+export const metadata = { title: "Configuración" };
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<{ notice?: string }> }) {
   const { creator } = await requireCreator();
@@ -14,10 +17,12 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const plan = PLANS[creator.plan];
   const days = trialDaysLeft(creator);
   const canceled = creator.subscription_status === "canceled";
+  const usage = await getUsage(creator.id);
+  const freeBytes = Math.max(0, creator.storage_limit_bytes - usage.storageUsedBytes);
 
   return (
     <div className="max-w-3xl space-y-8">
-      <h1 className="text-2xl font-bold tracking-tight">Suscripción</h1>
+      <h1 className="text-2xl font-bold tracking-tight">Configuración</h1>
 
       {notice === "use-portal" ? (
         <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -26,6 +31,14 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       ) : null}
 
       <section className="card space-y-4 p-6">
+        <h2 className="font-semibold">Uso de tu plan</h2>
+        <UsageMeter label="Almacenamiento" used={usage.storageUsedBytes} limit={creator.storage_limit_bytes} format={formatBytes} />
+        <p className="-mt-2 text-xs text-neutral-500">Te quedan {formatBytes(freeBytes)} disponibles.</p>
+        <UsageMeter label="Clientes" used={usage.clientCount} limit={creator.client_limit} />
+      </section>
+
+      <section className="card space-y-4 p-6">
+        <h2 className="font-semibold">Suscripción</h2>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-sm text-neutral-500">Plan actual</p>
@@ -55,7 +68,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
 
         <ul className="text-sm text-neutral-600">
           {plan.highlights.map((h) => (
-            <li key={h}>✓ {h}</li>
+            <li key={h} className="flex items-start gap-1.5"><CheckIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-green-600" />{h}</li>
           ))}
         </ul>
 
