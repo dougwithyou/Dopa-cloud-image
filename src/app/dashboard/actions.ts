@@ -325,6 +325,25 @@ export async function saveGalleryDesign(input: { projectId: string; design: unkn
 }
 
 /** Cambia la plantilla (tipo) del proyecto: galería de fotos o feed de Instagram. */
+/** Cambia el título del proyecto. */
+export async function renameProject(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const { supabase, creator } = await ctxOrThrow();
+  const parsed = z
+    .object({ projectId: Id, title: z.string().trim().min(1, "El título no puede quedar vacío").max(160) })
+    .safeParse({ projectId: formData.get("projectId"), title: formData.get("title") });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Título inválido" };
+  const { data, error } = await supabase
+    .from("projects")
+    .update({ title: parsed.data.title })
+    .eq("id", parsed.data.projectId)
+    .eq("creator_id", creator.id)
+    .select("id")
+    .maybeSingle();
+  if (error || !data) return { error: "No se pudo cambiar el título" };
+  revalidatePath("/dashboard", "layout");
+  return { message: "Título actualizado" };
+}
+
 export async function updateProjectType(formData: FormData): Promise<void> {
   const { supabase, creator } = await ctxOrThrow();
   const id = Id.parse(formData.get("projectId"));

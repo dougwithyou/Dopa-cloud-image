@@ -7,7 +7,7 @@ import { ACCEPT_ATTRIBUTE } from "@/lib/upload-rules";
 import { PROJECT_STATUS_LABEL, PROJECT_TYPE_HELP, PROJECT_TYPE_LABEL } from "@/lib/format";
 import { Uploader } from "@/components/uploader";
 import { SubmitButton } from "@/components/submit-button";
-import { AddClientToProjectForm } from "../../forms";
+import { AddClientToProjectForm, ProjectTitleEditor } from "../../forms";
 import {
   deleteProject,
   disableShareLink,
@@ -113,7 +113,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
         </Link>
         <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">{project.title}</h1>
+            <ProjectTitleEditor projectId={project.id} title={project.title} />
             <p className="text-neutral-500">
               {client?.name ?? "Sin cliente"} · {PROJECT_TYPE_LABEL[project.type]} · {PROJECT_STATUS_LABEL[project.status]}
             </p>

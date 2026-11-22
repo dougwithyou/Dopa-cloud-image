@@ -2,7 +2,8 @@
 
 import { useActionState, useState } from "react";
 import { FormMessage, SubmitButton } from "@/components/submit-button";
-import { addClientToProject, createClient, createProject, updateBusinessName } from "./actions";
+import { addClientToProject, createClient, createProject, renameProject, updateBusinessName } from "./actions";
+import { PencilIcon } from "@/components/icons";
 
 export function CreateProjectForm({ clients }: { clients: { id: string; name: string }[] }) {
   const [state, action] = useActionState(createProject, null);
@@ -154,6 +155,58 @@ export function BusinessNameForm({ value }: { value: string }) {
         Guardar
       </SubmitButton>
       <FormMessage state={state} />
+    </form>
+  );
+}
+
+/** Título del proyecto editable: lápiz para editar, Enter o "Guardar" para confirmar. */
+export function ProjectTitleEditor({ projectId, title }: { projectId: string; title: string }) {
+  const [editing, setEditing] = useState(false);
+  const [state, action] = useActionState(async (prev: { error?: string; message?: string } | null, formData: FormData) => {
+    const result = await renameProject(prev, formData);
+    if (!result?.error) setEditing(false);
+    return result;
+  }, null);
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="rounded-lg p-1.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-900"
+          aria-label="Editar título"
+          title="Editar título"
+        >
+          <PencilIcon className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form action={action} className="space-y-2">
+      <input type="hidden" name="projectId" value={projectId} />
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          name="title"
+          defaultValue={title}
+          maxLength={160}
+          required
+          autoFocus
+          className="input max-w-md text-lg font-semibold"
+          onKeyDown={(e) => e.key === "Escape" && setEditing(false)}
+          aria-label="Título del proyecto"
+        />
+        <SubmitButton className="btn-primary" pendingLabel="Guardando…">
+          Guardar
+        </SubmitButton>
+        <button type="button" className="btn-ghost" onClick={() => setEditing(false)}>
+          Cancelar
+        </button>
+      </div>
+      {state?.error ? <FormMessage state={state} /> : null}
     </form>
   );
 }
