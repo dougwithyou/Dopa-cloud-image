@@ -435,6 +435,35 @@ export async function updatePostCaption(formData: FormData): Promise<void> {
   if (post) revalidatePath(`/dashboard/projects/${post.project_id}`);
 }
 
+/** Guarda el orden completo de las publicaciones (arrastrar y soltar en la cuadrícula). */
+export async function reorderPosts(input: { projectId: string; postIds: string[] }): Promise<ActionState> {
+  const { supabase, creator } = await ctxOrThrow();
+  const projectId = Id.safeParse(input.projectId);
+  const postIds = z.array(Id).max(1000).safeParse(input.postIds);
+  if (!projectId.success || !postIds.success) return { error: "Orden inválido" };
+
+  const { data: current } = await supabase
+    .from("posts")
+    .select("id, position")
+    .eq("project_id", projectId.data)
+    .eq("creator_id", creator.id);
+  const known = new Map((current ?? []).map((p) => [p.id, p.position]));
+  if (postIds.data.length !== known.size || postIds.data.some((id) => !known.has(id))) {
+    return { error: "La lista cambió mientras ordenabas. Recarga la página." };
+  }
+
+  const results = await Promise.all(
+    postIds.data.map((id, position) =>
+      known.get(id) === position
+        ? null
+        : supabase.from("posts").update({ position }).eq("id", id).eq("creator_id", creator.id),
+    ),
+  );
+  if (results.some((r) => r?.error)) return { error: "No se pudo guardar el orden" };
+  revalidatePath(`/dashboard/projects/${projectId.data}`);
+  return { message: "Orden guardado" };
+}
+
 /** Cambia el orden de una publicación dentro del proyecto. */
 export async function movePost(formData: FormData): Promise<void> {
   const { supabase, creator } = await ctxOrThrow();

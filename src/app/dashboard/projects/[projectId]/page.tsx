@@ -22,6 +22,7 @@ import { shareUrl } from "@/lib/share";
 import { PostCard, type EditorAsset, type EditorPost } from "./post-card";
 import { EyeIcon, ImageIcon, LinkIcon } from "@/components/icons";
 import { MediaLibrary, type LibraryItem } from "./media-library";
+import { FeedGridEditor } from "./feed-grid-editor";
 
 export const metadata = { title: "Proyecto" };
 
@@ -318,18 +319,14 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
         <section>
           <h2 className="font-semibold">2. Publicaciones ({posts.length})</h2>
           <p className="mb-3 text-sm text-neutral-500">
-            Así se verán en el feed de tu cliente, en este orden. Escribe el copy de cada una.
+            Así verá el feed tu cliente. Arrástralas para cambiar el orden y toca una para editar su copy.
           </p>
           {posts.length === 0 ? (
             <div className="card p-8 text-center text-sm text-neutral-500">
               Aún no hay publicaciones. Selecciona archivos en el material y pulsa “Crear publicación”.
             </div>
           ) : (
-            <ul className="space-y-4">
-              {posts.map((post, i) => (
-                <PostCard key={post.id} post={post} index={i} total={posts.length} />
-              ))}
-            </ul>
+            <FeedGridEditor projectId={project.id} posts={posts} />
           )}
         </section>
       ) : (
