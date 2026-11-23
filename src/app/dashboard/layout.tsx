@@ -1,13 +1,10 @@
 import Link from "next/link";
-import { Inter_Tight } from "next/font/google";
+import { dashFont } from "@/lib/fonts";
 import { requireCreator } from "@/lib/auth";
-import { APP_NAME } from "@/lib/env";
+import { Logo } from "@/components/logo";
 import { BackHome } from "@/components/back-home";
 import { SubscriptionBanner } from "@/components/subscription-banner";
 import { LogOutIcon, SettingsIcon } from "@/components/icons";
-
-// Tipografía del panel (la página principal y las plantillas de cliente no la usan).
-const dashFont = Inter_Tight({ subsets: ["latin"], variable: "--font-dash", display: "swap" });
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { creator } = await requireCreator();
@@ -15,14 +12,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div className={`dash ${dashFont.variable} min-h-dvh`}>
       <SubscriptionBanner creator={creator} />
       <header className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 pt-4 sm:pt-6">
-        <Link href="/dashboard" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
-          <span className="grid h-9 w-9 grid-cols-2 gap-[3px] rounded-full bg-white p-[9px]" aria-hidden>
-            <span className="rounded-full border-[1.5px] border-neutral-900" />
-            <span className="rounded-full border-[1.5px] border-neutral-900" />
-            <span className="rounded-full border-[1.5px] border-neutral-900" />
-            <span className="rounded-full bg-dash-yellow" />
-          </span>
-          {APP_NAME}
+        <Link href="/dashboard">
+          <Logo />
         </Link>
         <div className="flex items-center gap-2">
           <Link
