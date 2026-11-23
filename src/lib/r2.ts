@@ -179,9 +179,20 @@ export async function deletePrefix(prefix: string): Promise<number> {
  *  - disposition "attachment": fuerza la descarga con el nombre original.
  *  - disposition "inline": para <img>/<video> en el feed.
  */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export async function signDownloadUrl(
   key: string,
-  opts: { fileName?: string | null; disposition?: "attachment" | "inline"; expiresIn?: number } = {},
+  opts: {
+    fileName?: string | null;
+    disposition?: "attachment" | "inline";
+    expiresIn?: number;
+    /**
+     * Firma con la fecha del día (UTC) para que la URL no cambie en todo el
+     * día y el navegador reutilice la imagen de caché (miniaturas del panel).
+     */
+    stableForDay?: boolean;
+  } = {},
 ): Promise<string> {
   const disposition = opts.disposition ?? "inline";
   let contentDisposition: string | undefined;
@@ -193,6 +204,8 @@ export async function signDownloadUrl(
   return getSignedUrl(
     r2(),
     new GetObjectCommand({ Bucket: bucket(), Key: key, ResponseContentDisposition: contentDisposition }),
-    { expiresIn: opts.expiresIn ?? DOWNLOAD_URL_TTL },
+    opts.stableForDay
+      ? { signingDate: new Date(Math.floor(Date.now() / DAY_MS) * DAY_MS), expiresIn: (2 * DAY_MS) / 1000 }
+      : { expiresIn: opts.expiresIn ?? DOWNLOAD_URL_TTL },
   );
 }

@@ -171,11 +171,11 @@ export function ProjectTitleEditor({ projectId, title }: { projectId: string; ti
   if (!editing) {
     return (
       <div className="flex items-center gap-2">
-        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+        <h1 className="text-[1.75rem] leading-tight font-semibold tracking-[-0.02em] sm:text-[2rem]">{title}</h1>
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="rounded-lg p-1.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-900"
+          className="shrink-0 rounded-full p-2 text-black/45 transition hover:bg-black/10 hover:text-neutral-950"
           aria-label="Editar título"
           title="Editar título"
         >
@@ -195,7 +195,7 @@ export function ProjectTitleEditor({ projectId, title }: { projectId: string; ti
           maxLength={160}
           required
           autoFocus
-          className="input max-w-md text-lg font-semibold"
+          className="input max-w-md bg-white text-lg font-semibold"
           onKeyDown={(e) => e.key === "Escape" && setEditing(false)}
           aria-label="Título del proyecto"
         />

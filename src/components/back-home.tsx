@@ -14,9 +14,13 @@ export function BackHome() {
   const parts = pathname.split("/").filter(Boolean);
   const isTopLevel = parts.length === 2 || pathname === "/dashboard/projects/new";
   if (!isTopLevel) return null;
+  return <BackLink href="/dashboard">Inicio</BackLink>;
+}
+
+export function BackLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <Link href="/dashboard" className="mb-4 inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900">
-      <ArrowLeftIcon className="h-4 w-4" /> Inicio
+    <Link href={href} className="mb-5 inline-flex items-center gap-2 text-[15px] text-neutral-600 transition hover:text-neutral-950">
+      <ArrowLeftIcon className="h-[18px] w-[18px]" /> {children}
     </Link>
   );
 }

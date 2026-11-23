@@ -23,6 +23,8 @@ import { PostCard, type EditorAsset, type EditorPost } from "./post-card";
 import { EyeIcon, ImageIcon, LinkIcon } from "@/components/icons";
 import { MediaLibrary, type LibraryItem } from "./media-library";
 import { FeedGridEditor } from "./feed-grid-editor";
+import { BackLink } from "@/components/back-home";
+import { Folder, folderColor, StatusTab } from "@/components/dashboard/folder";
 
 export const metadata = { title: "Proyecto" };
 
@@ -109,51 +111,85 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
   return (
     <div className="space-y-8">
       <div>
-        <Link href="/dashboard/projects" className="text-sm text-neutral-500 hover:text-neutral-900">
-          ← Proyectos
-        </Link>
-        <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <ProjectTitleEditor projectId={project.id} title={project.title} />
-            <p className="text-neutral-500">
-              {client?.name ?? "Sin cliente"} · {PROJECT_TYPE_LABEL[project.type]} · {PROJECT_STATUS_LABEL[project.status]}
+        <BackLink href="/dashboard/projects">Proyectos</BackLink>
+        <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
+          <Folder color={folderColor(project.type, project.status)} tab={<StatusTab status={project.status} />}>
+            <div className="flex h-full flex-col px-5 pt-3 pb-5 sm:px-6">
+              <ProjectTitleEditor projectId={project.id} title={project.title} />
+              <p className="mt-1 text-sm text-black/60">{PROJECT_TYPE_LABEL[project.type]}</p>
+              <div className="mt-auto pt-5">
+                <div className="folder-dots" />
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {project.type === "photo_session" ? (
+                  <Link href={`/design/${project.id}`} className="btn-secondary">
+                    <ImageIcon className="h-4 w-4" /> Diseñar galería
+                  </Link>
+                ) : null}
+                <Link href={`/preview/${project.id}`} target="_blank" className="btn-secondary">
+                  <EyeIcon className="h-4 w-4" /> Vista previa
+                </Link>
+              </div>
+            </div>
+          </Folder>
+
+          <div className="relative overflow-hidden rounded-[26px] bg-neutral-950 p-5 text-white sm:p-6">
+            <svg viewBox="0 0 200 200" className="pointer-events-none absolute -right-16 -bottom-20 h-56 w-56 text-white/10" aria-hidden>
+              <circle cx="100" cy="100" r="80" fill="none" stroke="currentColor" strokeWidth="22" />
+            </svg>
+            <p className="relative text-lg">Detalles del proyecto</p>
+            <dl className="relative mt-4 grid grid-cols-3 gap-3">
+              <div>
+                <dt className="text-xs text-white/50">Estado</dt>
+                <dd className="mt-1 flex items-center gap-1.5 text-sm">
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      project.status === "published" ? "bg-green-400" : project.status === "draft" ? "bg-dash-yellow" : "bg-white/40"
+                    }`}
+                  />
+                  {PROJECT_STATUS_LABEL[project.status]}
+                </dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-xs text-white/50">Cliente</dt>
+                <dd className="mt-1 truncate text-sm">{client?.name ?? "Sin cliente"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-white/50">{isFeed ? "Publicaciones" : "Fotos"}</dt>
+                <dd className="mt-1 text-sm">
+                  {isFeed ? posts.length : files.filter((f) => f.kind === "photo" && f.upload_status === "complete").length}
+                </dd>
+              </div>
+            </dl>
+            <p className="relative mt-4 text-sm text-white/60">
+              {project.status === "published"
+                ? client
+                  ? client.user_id
+                    ? `Visible en el portal de ${client.name}.`
+                    : `${client.name} lo verá cuando entre con el enlace que le enviamos por correo.`
+                  : "Publicado, pero sin cliente: agrega uno para que alguien lo vea."
+                : project.status === "draft"
+                  ? `Solo tú lo ves. Cuando lo publiques, ${client ? client.name : "el cliente"} recibirá su acceso.`
+                  : "Archivado: tu cliente ya no lo ve."}
             </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {project.type === "photo_session" ? (
-              <Link href={`/design/${project.id}`} className="btn-secondary">
-                <ImageIcon className="h-4 w-4" /> Diseñar galería
-              </Link>
-            ) : null}
-            <Link href={`/preview/${project.id}`} target="_blank" className="btn-secondary">
-              <EyeIcon className="h-4 w-4" /> Vista previa
-            </Link>
-            {(["draft", "published", "archived"] as const)
-              .filter((s) => s !== project.status)
-              .map((status) => (
-                <form key={status} action={updateProjectStatus}>
-                  <input type="hidden" name="projectId" value={project.id} />
-                  <input type="hidden" name="status" value={status} />
-                  <SubmitButton className={status === "published" ? "btn-brand" : "btn-secondary"} pendingLabel="…">
-                    {status === "published" ? "Publicar" : status === "draft" ? "Pasar a borrador" : "Archivar"}
-                  </SubmitButton>
-                </form>
-              ))}
+            <div className="relative mt-5 flex flex-wrap gap-2">
+              {(["published", "draft", "archived"] as const)
+                .filter((s) => s !== project.status)
+                .map((status) => (
+                  <form key={status} action={updateProjectStatus}>
+                    <input type="hidden" name="projectId" value={project.id} />
+                    <input type="hidden" name="status" value={status} />
+                    <SubmitButton
+                      className={status === "published" ? "btn-brand" : "btn rounded-full bg-white/10 px-5 text-white hover:bg-white/20"}
+                      pendingLabel="…"
+                    >
+                      {status === "published" ? "Publicar" : status === "draft" ? "Pasar a borrador" : "Archivar"}
+                    </SubmitButton>
+                  </form>
+                ))}
+            </div>
           </div>
         </div>
-        {project.status === "published" ? (
-          <p className="mt-3 text-sm text-green-700">
-            {client
-              ? client.user_id
-                ? `Publicado: visible en el portal de ${client.name}.`
-                : `Publicado. ${client.name} lo verá cuando entre con el enlace que le enviamos por correo.`
-              : "Publicado, pero sin cliente: agrega uno para que alguien lo vea."}
-          </p>
-        ) : project.status === "draft" ? (
-          <p className="mt-3 text-sm text-neutral-500">
-            Borrador: solo tú lo ves. Cuando lo publiques, {client ? client.name : "el cliente"} recibirá su acceso.
-          </p>
-        ) : null}
       </div>
 
       <section className="card p-5">
@@ -168,8 +204,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
                 <button
                   type="submit"
                   disabled={active}
-                  className={`w-full rounded-xl border p-4 text-left transition ${
-                    active ? "border-neutral-900 ring-2 ring-neutral-900/10" : "border-neutral-200 hover:border-neutral-400"
+                  className={`w-full rounded-[20px] border p-4 text-left transition ${
+                    active
+                      ? `border-transparent ${type === "photo_session" ? "bg-dash-yellow-soft" : "bg-dash-blue-soft"}`
+                      : "border-neutral-200 hover:border-neutral-400"
                   }`}
                 >
                   <span className="flex items-center justify-between text-sm font-semibold">
@@ -295,7 +333,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
 
       <section className="space-y-4">
         <div>
-          <h2 className="font-semibold">1. Material del proyecto</h2>
+          <h2 className="flex items-center gap-2.5 text-xl tracking-tight">
+            <StepNumber n={1} /> Material del proyecto
+          </h2>
           <p className="text-sm text-neutral-500">
             {isFeed
               ? "Sube aquí todo el material. Después selecciona archivos para armar cada publicación o carrusel."
@@ -317,7 +357,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
 
       {isFeed ? (
         <section>
-          <h2 className="font-semibold">2. Publicaciones ({posts.length})</h2>
+          <h2 className="flex items-center gap-2.5 text-xl tracking-tight">
+            <StepNumber n={2} /> Publicaciones <span className="text-neutral-400">({posts.length})</span>
+          </h2>
           <p className="mb-3 text-sm text-neutral-500">
             Así verá el feed tu cliente. Arrástralas para cambiar el orden y toca una para editar su copy.
           </p>
@@ -333,7 +375,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
         <section>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 className="font-semibold">2. Escenas ({posts.length})</h2>
+              <h2 className="flex items-center gap-2.5 text-xl tracking-tight">
+                <StepNumber n={2} /> Escenas <span className="text-neutral-400">({posts.length})</span>
+              </h2>
               <p className="text-sm text-neutral-500">
                 Opcional: secciones con título, como “Ceremonia” o “Recepción”. Las fotos sin escena aparecen al final.
               </p>
@@ -365,5 +409,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
         </form>
       </section>
     </div>
+  );
+}
+
+function StepNumber({ n }: { n: number }) {
+  return (
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-950 text-sm font-medium text-white">{n}</span>
   );
 }

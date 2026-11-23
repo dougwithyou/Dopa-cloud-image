@@ -9,6 +9,12 @@ export interface ProjectCover {
   url: string;
 }
 
+export interface ProjectSummary {
+  cover?: ProjectCover;
+  photos: number;
+  videos: number;
+}
+
 type ProjectRef = { id: string; type: "photo_session" | "monthly_content"; design: unknown };
 
 const byOrder = (a: { position: number; created_at: string }, b: { position: number; created_at: string }) =>
@@ -19,13 +25,14 @@ const byOrder = (a: { position: number; created_at: string }, b: { position: num
  * - Galería: la foto elegida en el diseño o, si no hay, la primera foto subida.
  * - Feed: el primer archivo de la primera publicación (lo que el cliente ve
  *   arriba a la izquierda) o, sin publicaciones, el primer archivo subido.
- * Devuelve URLs firmadas de R2; la consulta pasa por RLS.
+ * También cuenta fotos y videos. URLs firmadas de R2 estables durante el día
+ * (caché del navegador); la consulta pasa por RLS.
  */
 export async function loadProjectCovers(
   supabase: SupabaseClient<Database>,
   projects: ProjectRef[],
-): Promise<Map<string, ProjectCover>> {
-  const covers = new Map<string, ProjectCover>();
+): Promise<Map<string, ProjectSummary>> {
+  const covers = new Map<string, ProjectSummary>();
   if (projects.length === 0) return covers;
   const ids = projects.map((p) => p.id);
   const feedIds = projects.filter((p) => p.type === "monthly_content").map((p) => p.id);
@@ -68,10 +75,13 @@ export async function loadProjectCovers(
 
   await Promise.all(
     picks.map(async (asset, i) => {
-      if (!asset) return;
+      const own = assets.filter((a) => a.project_id === projects[i].id);
       covers.set(projects[i].id, {
-        kind: asset.kind,
-        url: await signDownloadUrl(asset.r2_key, { disposition: "inline" }),
+        photos: own.filter((a) => a.kind === "photo").length,
+        videos: own.filter((a) => a.kind === "video").length,
+        cover: asset
+          ? { kind: asset.kind, url: await signDownloadUrl(asset.r2_key, { disposition: "inline", stableForDay: true }) }
+          : undefined,
       });
     }),
   );

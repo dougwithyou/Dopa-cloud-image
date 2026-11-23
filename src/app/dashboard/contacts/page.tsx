@@ -22,8 +22,10 @@ export default async function ContactsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Contactos</h1>
-          <p className="text-neutral-500">
+          <h1 className="dash-title">
+            Contactos<sup>({total})</sup>
+          </h1>
+          <p className="mt-2 max-w-2xl text-neutral-500">
             Personas que entraron a tus galerías compartidas por enlace · {total} en total · {consenting} aceptan recibir
             correos de marketing
           </p>

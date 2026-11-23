@@ -153,3 +153,19 @@ export function PencilIcon(p: IconProps) {
     </Svg>
   );
 }
+
+export function ArrowRightIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M5 12h14M12 5l7 7-7 7" />
+    </Svg>
+  );
+}
+
+export function PlusIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M5 12h14M12 5v14" />
+    </Svg>
+  );
+}

@@ -9,8 +9,8 @@ export default async function NewProjectPage() {
   return (
     <div className="max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Nuevo proyecto</h1>
-        <p className="text-neutral-500">Después podrás subir el material, armar las publicaciones y ver la vista previa.</p>
+        <h1 className="dash-title">Nuevo proyecto</h1>
+        <p className="mt-2 text-neutral-500">Después podrás subir el material, armar las publicaciones y ver la vista previa.</p>
       </div>
       <section className="card p-6">
         <CreateProjectForm clients={clients ?? []} />

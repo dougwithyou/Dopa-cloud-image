@@ -7,6 +7,14 @@
   --color-brand-500: #e1306c;
   --color-brand-600: #c41f5a;
   --color-brand-700: #9e1748;
+
+  /* Panel del creador (estilo carpetas) */
+  --color-dash-bg: #f1f1f4;
+  --color-dash-yellow: #f6c143;
+  --color-dash-yellow-soft: #fcf1d5;
+  --color-dash-blue: #55aef0;
+  --color-dash-blue-soft: #ddeffd;
+  --color-dash-gray: #d9d9df;
 }
 
 :root {
@@ -50,5 +58,88 @@ body {
   }
   .badge {
     @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+}
+
+/*
+ * Panel del creador. Todo va bajo .dash para no tocar la página principal ni
+ * las plantillas que ven los clientes. En la capa components: las utilidades
+ * de cada elemento (p-5, text-xs…) siguen mandando.
+ */
+@layer components {
+  .dash {
+    font-family: var(--font-dash), var(--font-sans);
+    background: var(--color-dash-bg);
+    letter-spacing: -0.005em;
+  }
+  .dash .btn {
+    @apply rounded-full;
+  }
+  .dash .btn-primary,
+  .dash .btn-brand,
+  .dash .btn-secondary,
+  .dash .btn-danger,
+  .dash .btn-ghost {
+    @apply rounded-full px-5;
+  }
+  .dash .btn-primary {
+    @apply bg-neutral-950 hover:bg-neutral-800;
+  }
+  .dash .btn-brand {
+    @apply bg-dash-yellow text-neutral-950 hover:brightness-95;
+  }
+  .dash .btn-secondary {
+    @apply border-transparent bg-white shadow-[0_0_0_1px_rgb(0_0_0/0.08)] hover:bg-neutral-50;
+  }
+  .dash .btn-danger {
+    @apply border-transparent bg-white shadow-[0_0_0_1px_rgb(220_38_38/0.25)];
+  }
+  .dash .btn-ghost {
+    @apply hover:bg-black/5;
+  }
+  .dash .card {
+    @apply rounded-[26px] border-transparent bg-white;
+  }
+  .dash .input {
+    @apply rounded-xl border-transparent bg-[#f4f4f7] focus:border-neutral-900 focus:bg-white;
+  }
+  .dash .badge {
+    @apply px-2.5 py-1;
+  }
+
+  /* Título grande y ligero, con el contador en superíndice. */
+  .dash-title {
+    @apply text-[2.6rem] leading-[1.02] font-normal tracking-[-0.03em] sm:text-6xl;
+  }
+  .dash-title sup {
+    @apply top-[-1.4em] ml-1 align-baseline text-lg font-normal tracking-normal text-neutral-400 sm:text-2xl;
+  }
+
+  /* Control segmentado (Todos / Borrador / …). */
+  .seg {
+    @apply inline-flex max-w-full gap-1 overflow-x-auto rounded-full bg-[#e6e6ea] p-1;
+  }
+  .seg > * {
+    @apply shrink-0 rounded-full px-3.5 py-1.5 text-sm sm:px-4 whitespace-nowrap text-neutral-500 transition hover:text-neutral-900;
+  }
+  .seg > [aria-current="page"] {
+    @apply bg-neutral-950 text-white hover:text-white;
+  }
+
+  /* Carpetas */
+  .folder-yellow {
+    --folder: var(--color-dash-yellow);
+  }
+  .folder-blue {
+    --folder: var(--color-dash-blue);
+  }
+  .folder-gray {
+    --folder: var(--color-dash-gray);
+  }
+  .folder-dots {
+    height: 22px;
+    background-image: radial-gradient(circle, rgb(0 0 0 / 0.4) 1.1px, transparent 1.5px);
+    background-size: 11px 11px;
+    background-position: -3px -3px;
   }
 }

@@ -22,7 +22,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="max-w-3xl space-y-8">
-      <h1 className="text-2xl font-bold tracking-tight">Configuración</h1>
+      <h1 className="dash-title">Configuración</h1>
 
       {notice === "use-portal" ? (
         <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
