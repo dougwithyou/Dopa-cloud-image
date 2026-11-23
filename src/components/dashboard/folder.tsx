@@ -31,10 +31,16 @@ export function Folder({
 }) {
   return (
     <div className={`folder-${color} flex flex-col text-neutral-950 ${className}`}>
-      <div className="flex items-stretch">
-        <div className="flex min-w-0 items-center gap-2 rounded-t-[22px] bg-(--folder) pt-2.5 pr-1 pb-1.5 pl-2.5">{tab}</div>
-        <svg viewBox="0 0 44 40" preserveAspectRatio="none" className="-ml-px w-11 shrink-0" aria-hidden>
-          <path d="M0 0H3C24 0 18 40 44 40H0Z" style={{ fill: "var(--folder)" }} />
+      {/*
+        Pestaña: un bloque plano con la esquina izquierda redondeada y, a su
+        derecha, la bajada dibujada en SVG a escala fija (sin deformar): un
+        hombro redondeado arriba, la pendiente y un pie cóncavo que termina
+        tangente al borde del cuerpo. Así no queda ningún pico en la unión.
+      */}
+      <div className="flex h-10 items-stretch">
+        <div className="flex min-w-0 items-center gap-2 rounded-tl-[22px] bg-(--folder) pt-0.5 pl-2.5">{tab}</div>
+        <svg viewBox="0 0 56 40" className="-ml-px h-10 w-14 shrink-0" aria-hidden>
+          <path d="M0 0H6C15 0 19.5 4 23 11L32 29C35.5 36 40.5 40 56 40H0Z" style={{ fill: "var(--folder)" }} />
         </svg>
       </div>
       <div className="-mt-px flex-1 rounded-[26px] rounded-tl-none bg-(--folder)">{children}</div>
