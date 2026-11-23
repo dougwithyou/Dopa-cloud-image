@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireCreator } from "@/lib/auth";
 import { PROJECT_STATUS_LABEL, PROJECT_TYPE_LABEL } from "@/lib/format";
+import { ProjectThumb } from "@/components/project-thumb";
+import { loadProjectCovers } from "@/lib/project-covers";
 import { ChevronRightIcon, FolderPlusIcon, FoldersIcon, MailIcon, UserPlusIcon } from "@/components/icons";
 
 export const metadata = { title: "Inicio" };
@@ -37,9 +39,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const { checkout } = await searchParams;
   const { data: recent } = await supabase
     .from("projects")
-    .select("id, title, type, status, clients(name)")
+    .select("id, title, type, status, design, clients(name)")
     .order("updated_at", { ascending: false })
     .limit(4);
+  const covers = await loadProjectCovers(supabase, recent ?? []);
 
   return (
     <div className="space-y-10">
@@ -78,7 +81,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <ul className="divide-y divide-neutral-100 rounded-2xl border border-neutral-200 bg-white">
             {recent.map((p) => (
               <li key={p.id}>
-                <Link href={`/dashboard/projects/${p.id}`} className="flex items-center gap-3 px-5 py-3.5 hover:bg-neutral-50">
+                <Link href={`/dashboard/projects/${p.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 sm:px-5">
+                  <ProjectThumb cover={covers.get(p.id)} className="h-12 w-12 shrink-0 rounded-lg [&_svg]:h-5 [&_svg]:w-5" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{p.title}</span>
                     <span className="block truncate text-xs text-neutral-500">

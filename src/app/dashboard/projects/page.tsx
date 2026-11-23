@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requireCreator } from "@/lib/auth";
 import { formatDate, PROJECT_STATUS_LABEL, PROJECT_TYPE_LABEL } from "@/lib/format";
 import { FolderPlusIcon } from "@/components/icons";
+import { ProjectThumb } from "@/components/project-thumb";
+import { loadProjectCovers } from "@/lib/project-covers";
 
 export const metadata = { title: "Proyectos anteriores" };
 
@@ -15,8 +17,9 @@ export default async function ProjectsPage() {
   const { supabase } = await requireCreator();
   const { data: projects } = await supabase
     .from("projects")
-    .select("id, title, type, status, created_at, clients(name), posts(count)")
+    .select("id, title, type, status, design, created_at, clients(name), posts(count)")
     .order("created_at", { ascending: false });
+  const covers = await loadProjectCovers(supabase, projects ?? []);
 
   return (
     <div className="space-y-8">
@@ -33,17 +36,20 @@ export default async function ProjectsPage() {
             const postCount = (p.posts as unknown as { count: number }[] | null)?.[0]?.count ?? 0;
             return (
               <li key={p.id}>
-                <Link href={`/dashboard/projects/${p.id}`} className="card block p-5 transition hover:border-neutral-400">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="font-semibold">{p.title}</p>
-                    <span className={`badge ${STATUS_STYLE[p.status]}`}>{PROJECT_STATUS_LABEL[p.status]}</span>
+                <Link href={`/dashboard/projects/${p.id}`} className="card block overflow-hidden transition hover:border-neutral-400">
+                  <ProjectThumb cover={covers.get(p.id)} className="aspect-[16/10] w-full" />
+                  <div className="p-5">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-semibold">{p.title}</p>
+                      <span className={`badge ${STATUS_STYLE[p.status]}`}>{PROJECT_STATUS_LABEL[p.status]}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-neutral-500">
+                      {p.clients?.name ?? <span className="text-amber-700">Sin cliente</span>}
+                    </p>
+                    <p className="mt-3 text-xs text-neutral-500">
+                      {PROJECT_TYPE_LABEL[p.type]} · {postCount} {postCount === 1 ? "publicación" : "publicaciones"} · {formatDate(p.created_at)}
+                    </p>
                   </div>
-                  <p className="mt-1 text-sm text-neutral-500">
-                    {p.clients?.name ?? <span className="text-amber-700">Sin cliente</span>}
-                  </p>
-                  <p className="mt-3 text-xs text-neutral-500">
-                    {PROJECT_TYPE_LABEL[p.type]} · {postCount} {postCount === 1 ? "publicación" : "publicaciones"} · {formatDate(p.created_at)}
-                  </p>
                 </Link>
               </li>
             );
