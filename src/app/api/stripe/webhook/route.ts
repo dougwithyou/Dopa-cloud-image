@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -6,6 +6,7 @@ import { creatorEmail, syncSubscription } from "@/lib/billing";
 import { sendPaymentFailed, sendTrialEnding } from "@/lib/email";
 import { requireEnv, portalGracePeriodDays } from "@/lib/env";
 import { PLANS, formatPrice } from "@/lib/plans";
+import { fulfillOrder, markOrderPaid } from "@/lib/print-fulfillment";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,10 +66,29 @@ async function handleEvent(event: Stripe.Event): Promise<void> {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object;
+      if (session.metadata?.kind === "print_order") {
+        // Pedido de impresiones: se marca pagado y se envía al laboratorio
+        // después de responder a Stripe (armar el pedido tarda unos segundos).
+        const orderId = await markOrderPaid(session);
+        if (orderId) after(() => fulfillOrder(orderId));
+        return;
+      }
       if (session.mode !== "subscription" || !session.subscription) return;
       const subscriptionId =
         typeof session.subscription === "string" ? session.subscription : session.subscription.id;
       await syncSubscription(subscriptionId, session.client_reference_id ?? session.metadata?.creator_id);
+      return;
+    }
+
+    case "checkout.session.expired": {
+      const session = event.data.object;
+      if (session.metadata?.kind === "print_order" && session.metadata.order_id) {
+        await createAdminClient()
+          .from("print_orders")
+          .update({ status: "canceled", failure_reason: "Pago no completado" })
+          .eq("id", session.metadata.order_id)
+          .eq("status", "pending_payment");
+      }
       return;
     }
 

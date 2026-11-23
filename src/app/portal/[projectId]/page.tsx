@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { loadProjectContent } from "@/lib/project-content";
 import { ProjectView } from "@/components/templates/project-view";
+import { loadStoreConfig } from "@/lib/store";
 
 export const metadata = { title: "Tu contenido" };
 
@@ -21,11 +22,12 @@ export default async function PortalProjectPage({ params }: { params: Promise<{ 
     .maybeSingle();
   if (!project) notFound();
 
-  const [content, { data: creators }] = await Promise.all([
+  const [content, { data: creators }, store] = await Promise.all([
     loadProjectContent(supabase, project.id),
     supabase.rpc("my_creators"),
+    project.type === "photo_session" ? loadStoreConfig(project.id) : null,
   ]);
   const authorName = (creators ?? []).find((c) => c.id === project.creator_id)?.business_name ?? "Tu creador";
 
-  return <ProjectView project={project} authorName={authorName} posts={content.posts} library={content.library} />;
+  return <ProjectView project={project} authorName={authorName} posts={content.posts} library={content.library} store={store} />;
 }

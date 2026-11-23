@@ -7,6 +7,7 @@ import { parseDesign } from "@/lib/gallery-design";
 import { APP_NAME } from "@/lib/env";
 import { ProjectView } from "@/components/templates/project-view";
 import { GateForm } from "./gate-form";
+import { loadStoreConfig } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Galería", robots: { index: false, follow: false } };
@@ -34,7 +35,7 @@ export default async function SharedGalleryPage({ params }: { params: Promise<{ 
   const admin = createAdminClient();
 
   if (await hasVisitorAccess(gallery.id)) {
-    const content = await loadProjectContent(admin, gallery.id);
+    const [content, store] = await Promise.all([loadProjectContent(admin, gallery.id), loadStoreConfig(gallery.id)]);
     return (
       <ProjectView
         project={gallery}
@@ -42,6 +43,7 @@ export default async function SharedGalleryPage({ params }: { params: Promise<{ 
         posts={content.posts}
         library={content.library}
         downloadBase={`/api/share/${token}/download/`}
+        store={store}
       />
     );
   }

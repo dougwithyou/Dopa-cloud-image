@@ -4,6 +4,7 @@ import { requireCreator } from "@/lib/auth";
 import { loadProjectContent } from "@/lib/project-content";
 import { PROJECT_STATUS_LABEL, PROJECT_TYPE_LABEL } from "@/lib/format";
 import { ProjectView } from "@/components/templates/project-view";
+import { loadStoreConfig } from "@/lib/store";
 
 export const metadata = { title: "Vista previa" };
 
@@ -23,7 +24,10 @@ export default async function PreviewPage({ params }: { params: Promise<{ projec
     .maybeSingle();
   if (!project) notFound();
 
-  const content = await loadProjectContent(supabase, project.id);
+  const [content, store] = await Promise.all([
+    loadProjectContent(supabase, project.id),
+    project.type === "photo_session" ? loadStoreConfig(project.id) : null,
+  ]);
 
   return (
     <div className="min-h-dvh bg-white">
@@ -38,7 +42,7 @@ export default async function PreviewPage({ params }: { params: Promise<{ projec
           </Link>
         </div>
       </div>
-      <ProjectView project={project} authorName={creator.business_name} posts={content.posts} library={content.library} />
+      <ProjectView project={project} authorName={creator.business_name} posts={content.posts} library={content.library} store={store} />
     </div>
   );
 }

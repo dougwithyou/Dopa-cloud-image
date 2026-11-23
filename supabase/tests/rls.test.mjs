@@ -506,5 +506,86 @@ check(
 );
 await db.exec(`reset role; update public.projects set type = 'monthly_content', share_token = null where id = '${pA2pub}'`);
 
+// ---------- Tienda de impresiones ----------
+{
+  const prod = await db.query(`
+    insert into public.print_products (lab, product_ref, product_name, category_ref, category_name, size_id, size_label, selections, cost_cents)
+    values ('whcc','photo-print','Photo Print','prints','Prints','8x10','8×10','{"size":"8x10"}', 450),
+           ('whcc','metal-print','Metal Print','wall-art','Wall Art','8x10','8×10','{"size":"8x10"}', 2900)
+    returning id`);
+  const [prodPrint, prodMetal] = prod.rows.map((r) => r.id);
+  const order = await db.query(`
+    insert into public.print_orders (reference, creator_id, project_id, buyer_email, buyer_name, shipping_address,
+      subtotal_cents, shipping_cents, lab_cost_cents, platform_fee_percent, lab)
+    values ('HDC-TEST1','${cA}','${pA2pub}','x@y.com','X Y','{}', 1000, 995, 450, 15, 'whcc')
+    returning id`);
+  const orderA = order.rows[0].id;
+  await db.exec(`
+    insert into public.print_order_items (order_id, creator_id, product_id, product_name, size_label, file_name, selections, quantity, unit_price_cents, unit_cost_cents)
+    values ('${orderA}','${cA}','${prodPrint}','Photo Print','8×10','a.jpg','{}',1,1000,450)`);
+
+  await as(U.creatorA, async () => {
+    check("Creador lee el catálogo", (await db.query(`select id from public.print_products`)).rows.length === 2);
+    check(
+      "Creador no puede cambiar costos del catálogo",
+      /permission denied/.test(await fails(`update public.print_products set cost_cents = 1`)),
+    );
+    check(
+      "Creador no puede insertar productos",
+      /permission denied/.test(
+        await fails(`insert into public.print_products (lab, product_ref, product_name, category_ref, category_name, size_id, size_label, cost_cents) values ('x','x','x','x','x','x','x',1)`),
+      ),
+    );
+    const own = await db.query(
+      `insert into public.creator_product_prices (creator_id, product_id, markup_percent) values ('${cA}','${prodPrint}', 150) returning product_id`,
+    );
+    check("Creador fija su margen por producto", own.rows.length === 1);
+    check(
+      "Margen por debajo del mínimo rechazado",
+      (await fails(`update public.creator_product_prices set markup_percent = 5 where product_id = '${prodPrint}'`)) !== null,
+    );
+    check(
+      "Creador no puede fijar precios de otro creador",
+      (await fails(`insert into public.creator_product_prices (creator_id, product_id) values ('${cB}','${prodMetal}')`)) !== null,
+    );
+    check("Creador cambia su margen por defecto", (await db.query(`update public.creators set store_markup_percent = 120 returning id`)).rows.length === 1);
+    check(
+      "Creador no puede fijar su cuenta de cobros",
+      /permission denied/.test(await fails(`update public.creators set connect_payouts_enabled = true`)),
+    );
+    check(
+      "Creador puede activar la tienda de su galería",
+      (await db.query(`update public.projects set store_enabled = true where id = '${pA2pub}' returning id`)).rows.length === 1,
+    );
+    check("Creador ve sus pedidos", (await db.query(`select id from public.print_orders`)).rows.length === 1);
+    check("Creador ve las líneas de sus pedidos", (await db.query(`select id from public.print_order_items`)).rows.length === 1);
+    check(
+      "Creador no puede modificar pedidos",
+      /permission denied/.test(await fails(`update public.print_orders set creator_earnings_cents = 999999`)),
+    );
+    check(
+      "Creador no puede crear pedidos",
+      /permission denied/.test(
+        await fails(`insert into public.print_orders (reference, creator_id, buyer_email, buyer_name, shipping_address, subtotal_cents, shipping_cents, lab_cost_cents, platform_fee_percent, lab) values ('x','${cA}','a','b','{}',1,1,1,1,'whcc')`),
+      ),
+    );
+    check("lab_events inaccesible", /permission denied/.test(await fails(`select * from public.lab_events`)));
+  });
+  await as(U.creatorB, async () => {
+    check("Otro creador no ve esos pedidos", (await db.query(`select id from public.print_orders`)).rows.length === 0);
+    check("Otro creador no ve esas líneas", (await db.query(`select id from public.print_order_items`)).rows.length === 0);
+    check("Otro creador no ve márgenes ajenos", (await db.query(`select * from public.creator_product_prices`)).rows.length === 0);
+  });
+  await as(U.clientA2, async () => {
+    check("Cliente no ve pedidos del creador", (await db.query(`select id from public.print_orders`)).rows.length === 0);
+    check("Cliente no ve el catálogo con costos", (await db.query(`select id from public.print_products`)).rows.length === 0);
+  });
+  await db.exec(`set role anon;`);
+  check("anon no lee el catálogo", /permission denied/.test(await fails(`select * from public.print_products`)));
+  check("anon no lee pedidos", /permission denied/.test(await fails(`select * from public.print_orders`)));
+  await db.exec(`reset role;`);
+  await db.exec(`update public.projects set store_enabled = false where id = '${pA2pub}'`);
+}
+
 console.log(failures === 0 ? "\nTODAS LAS PRUEBAS PASARON" : `\n${failures} PRUEBAS FALLARON`);
 process.exit(failures === 0 ? 0 : 1);

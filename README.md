@@ -16,9 +16,10 @@ SaaS multi-tenant para que fotógrafos, videógrafos y agencias pequeñas entreg
 6. [Stripe (modo test)](#3-stripe-modo-test)
 7. [Resend (correo)](#4-resend-correo)
 8. [Despliegue en Vercel](#5-despliegue-en-vercel)
-9. [Paso a producción (modo live)](#paso-a-producción-modo-live)
-10. [Seguridad](#seguridad)
-11. [Decisiones de diseño](#decisiones-de-diseño)
+9. [Tienda de impresiones (WHCC)](#6-tienda-de-impresiones-whcc)
+10. [Paso a producción (modo live)](#paso-a-producción-modo-live)
+11. [Seguridad](#seguridad)
+12. [Decisiones de diseño](#decisiones-de-diseño)
 
 ---
 
@@ -237,7 +238,7 @@ Correos que envía la app:
    - R2: `AllowedOrigins` del CORS.
    - Stripe: endpoint del webhook.
    - `NEXT_PUBLIC_APP_URL`, y vuelve a desplegar.
-7. El cron de `vercel.json` (`/api/cron/cleanup-uploads`, diario) se activa solo en producción.
+7. Los crons de `vercel.json` (`/api/cron/cleanup-uploads` y `/api/cron/print-store`, diarios) se activan solo en producción.
 
 ### Checklist después del despliegue
 
@@ -246,6 +247,53 @@ Correos que envía la app:
 - [ ] Subir una foto y un video de más de 300 MB, publicar el proyecto y verlo en el portal del cliente. Probar descarga y copia de texto.
 - [ ] En *Developers → Webhooks* de Stripe, todos los eventos responden 200.
 - [ ] Con un segundo creador, comprobar que no ve nada del primero.
+
+## 6. Tienda de impresiones (WHCC)
+
+Los clientes compran impresiones y cuadros desde la galería; el laboratorio
+[WHCC](https://www.whcc.com/developer/docs/) los produce y los envía directo a
+su casa (EE.UU. continental, caja sin marcas). Hi Dopa Cloud tiene **una sola
+cuenta mayorista** en WHCC: los fotógrafos no necesitan cuenta en el laboratorio.
+
+**El dinero**
+
+| | |
+| --- | --- |
+| Precio al cliente | costo WHCC × (1 + margen del fotógrafo), redondeado a .99 |
+| Envío | se cobra al costo: $7.95 por paquete ($9.95 de noviembre a mediados de enero); cada categoría se envía aparte |
+| Cobro | Stripe Checkout de la plataforma (opcional: Stripe Tax con `STRIPE_TAX_ENABLED=true`) |
+| Laboratorio | WHCC cobra el costo a la tarjeta de la cuenta de WHCC de la plataforma |
+| Fotógrafo | margen − comisión de la plataforma (`storeFeePercent` del plan: Entry 15 %, Medium 10 %, High 0 %) − comisión de Stripe. Se le transfiere (Stripe Connect Express) **cuando el pedido se envía** |
+
+**Flujo de un pedido:** carrito (navegador) → `/api/store/checkout` (precios en
+el servidor, pedido `pending_payment`) → Stripe → webhook
+`checkout.session.completed` → `paid` → se arma cada producto en WHCC con la
+foto original (URL firmada de R2, 7 días), se espera a que WHCC la procese y se
+envía (`Idempotency-Key` = id del pedido) → `in_production` → evento
+`order.shipped` de WHCC → `shipped`, correo con seguimiento y transferencia al
+fotógrafo. Si WHCC rechaza o cancela, se reembolsa automáticamente.
+
+**Configuración (una vez)**
+
+1. Crea la cuenta en [whcc.com](https://www.whcc.com/account/signup) con la dirección y la tarjeta del negocio.
+2. En *Connected Accounts → API access*, crea una **llave de prueba** y ponla en Vercel como `WHCC_API_KEY` (con `WHCC_ENV=test`).
+3. Genera `WHCC_WEBHOOK_SECRET` (`openssl rand -base64 32`), ponlo en Vercel y crea la suscripción de eventos:
+
+   ```bash
+   WHCC_API_KEY=… WHCC_WEBHOOK_SECRET=… NEXT_PUBLIC_APP_URL=https://tu-dominio npm run whcc:subscribe
+   ```
+
+4. En Stripe: activa **Connect** (cuentas Express) y, si cobrarás impuestos, **Tax**. Agrega al webhook de Stripe el evento `checkout.session.expired`.
+5. El catálogo y los costos se sincronizan a diario (`/api/cron/print-store`); la primera vez se cargan al abrir *Tienda* en el panel.
+6. Cada fotógrafo: *Tienda → Conectar cobros*, ajusta su margen y activa la tienda en cada galería.
+
+**Pasar a pedidos reales:** pide *Live access* en WHCC (lo revisan), crea la
+llave live y pon `WHCC_API_KEY` (live), `WHCC_ENV=live` y `WHCC_ALLOW_LIVE=true`;
+vuelve a ejecutar `whcc:subscribe` con la llave live. Envía tu certificado de
+reventa a billing@whcc.com para que WHCC no cobre impuesto sobre el costo.
+
+**Por ahora** se venden impresiones y cuadros (productos de una sola foto).
+Tarjetas y photobooks usan el editor de WHCC y se agregan en una etapa siguiente.
 
 ## Paso a producción (modo live)
 

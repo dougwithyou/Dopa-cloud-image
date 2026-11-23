@@ -109,3 +109,98 @@ export async function sendPaymentFailed(opts: { to: string; businessName: string
   const text = `Hola ${opts.businessName}: el último cobro falló. Las subidas están bloqueadas y tus clientes conservan acceso ${opts.graceDays} días. Actualiza tu pago en ${manage}`;
   await send({ to: opts.to, subject, html, text });
 }
+
+// ---------------------------------------------------------------------------
+// Tienda de impresiones
+// ---------------------------------------------------------------------------
+
+type OrderEmailLine = { name: string; quantity: number; priceLabel: string };
+
+function linesHtml(lines: OrderEmailLine[]): string {
+  return `<table role="presentation" width="100%" style="border-collapse:collapse;margin:16px 0">${lines
+    .map(
+      (l) =>
+        `<tr><td style="padding:6px 0;border-bottom:1px solid #eee">${escapeHtml(l.name)} × ${l.quantity}</td><td align="right" style="padding:6px 0;border-bottom:1px solid #eee">${escapeHtml(l.priceLabel)}</td></tr>`,
+    )
+    .join("")}</table>`;
+}
+
+export async function sendPrintOrderConfirmation(opts: {
+  to: string;
+  buyerName: string;
+  businessName: string;
+  reference: string;
+  lines: OrderEmailLine[];
+  totalLabel: string;
+  orderLink: string;
+}) {
+  const body = `
+    <p>Hola ${escapeHtml(opts.buyerName)}, recibimos tu pedido de impresiones de <strong>${escapeHtml(opts.businessName)}</strong>.</p>
+    <p>Pedido <strong>${escapeHtml(opts.reference)}</strong></p>
+    ${linesHtml(opts.lines)}
+    <p><strong>Total: ${escapeHtml(opts.totalLabel)}</strong></p>
+    <p>Lo enviaremos a producción en el laboratorio y te avisaremos cuando salga, con su número de seguimiento.</p>
+    ${button(opts.orderLink, "Ver mi pedido")}`;
+  await send({
+    to: opts.to,
+    subject: `Pedido ${opts.reference} recibido`,
+    html: layout("¡Gracias por tu pedido!", body),
+    text: `Recibimos tu pedido ${opts.reference} de ${opts.businessName}. Total: ${opts.totalLabel}. Míralo aquí: ${opts.orderLink}`,
+  });
+}
+
+export async function sendPrintOrderShipped(opts: {
+  to: string;
+  buyerName: string;
+  reference: string;
+  tracking: { carrier: string | null; trackingNumber: string | null; trackingUrl: string | null }[];
+  orderLink: string;
+}) {
+  const list = opts.tracking
+    .map((t) =>
+      t.trackingUrl
+        ? `<li><a href="${escapeHtml(t.trackingUrl)}">${escapeHtml(`${t.carrier ?? "Paquete"} ${t.trackingNumber ?? ""}`.trim())}</a></li>`
+        : `<li>${escapeHtml(`${t.carrier ?? "Paquete"} ${t.trackingNumber ?? ""}`.trim())}</li>`,
+    )
+    .join("");
+  await send({
+    to: opts.to,
+    subject: `Tu pedido ${opts.reference} va en camino`,
+    html: layout("Tu pedido va en camino", `<p>Hola ${escapeHtml(opts.buyerName)}, tu pedido <strong>${escapeHtml(opts.reference)}</strong> salió del laboratorio.</p><ul>${list}</ul>${button(opts.orderLink, "Ver mi pedido")}`),
+    text: `Tu pedido ${opts.reference} va en camino. Seguimiento: ${opts.tracking.map((t) => t.trackingUrl ?? t.trackingNumber).filter(Boolean).join(", ")}`,
+  });
+}
+
+export async function sendPrintOrderProblem(opts: { to: string; buyerName: string; reference: string; refunded: boolean; orderLink: string }) {
+  const msg = opts.refunded
+    ? "No pudimos producir tu pedido y te devolvimos el dinero completo. Puede tardar de 5 a 10 días en verse en tu tarjeta."
+    : "Tuvimos un problema con tu pedido. Lo estamos revisando y te escribiremos pronto.";
+  await send({
+    to: opts.to,
+    subject: `Pedido ${opts.reference}: ${opts.refunded ? "reembolso" : "estamos revisándolo"}`,
+    html: layout("Novedades de tu pedido", `<p>Hola ${escapeHtml(opts.buyerName)}, ${escapeHtml(msg)}</p>${button(opts.orderLink, "Ver mi pedido")}`),
+    text: `Pedido ${opts.reference}: ${msg}`,
+  });
+}
+
+export async function sendNewSaleToCreator(opts: {
+  to: string;
+  businessName: string;
+  reference: string;
+  galleryTitle: string;
+  totalLabel: string;
+  earningsLabel: string;
+}) {
+  await send({
+    to: opts.to,
+    subject: `Nueva venta de impresiones (${opts.reference})`,
+    html: layout(
+      "¡Vendiste impresiones!",
+      `<p>${escapeHtml(opts.businessName)}, recibiste un pedido en la galería <strong>${escapeHtml(opts.galleryTitle)}</strong>.</p>
+       <p>Total pagado: <strong>${escapeHtml(opts.totalLabel)}</strong><br>Tu ganancia: <strong>${escapeHtml(opts.earningsLabel)}</strong></p>
+       <p>El laboratorio lo produce y lo envía directo a tu cliente. Recibes tu ganancia cuando el pedido se envía.</p>
+       ${button(appUrl("/dashboard/orders"), "Ver mis ventas")}`,
+    ),
+    text: `Nueva venta ${opts.reference} en ${opts.galleryTitle}. Total ${opts.totalLabel}, tu ganancia ${opts.earningsLabel}.`,
+  });
+}

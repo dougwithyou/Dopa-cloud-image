@@ -46,6 +46,6 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     // Todo excepto estáticos, el webhook de Stripe y el cron (no usan sesión).
-    "/((?!_next/static|_next/image|favicon.ico|api/stripe/webhook|api/cron|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/stripe/webhook|api/labs|api/cron|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

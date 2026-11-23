@@ -24,6 +24,8 @@ export interface Plan {
   /** Id fijo del producto en Stripe. */
   stripeProductId: string;
   highlights: string[];
+  /** Comisión de la plataforma sobre el margen de cada venta de la tienda de impresiones. */
+  storeFeePercent: number;
 }
 
 export const PLANS: Record<PlanId, Plan> = {
@@ -37,6 +39,7 @@ export const PLANS: Record<PlanId, Plan> = {
     lookupKey: "hidopa_entry_monthly_v1",
     stripeProductId: "hidopa_cloud_entry",
     highlights: ["25 GB de almacenamiento", "Hasta 3 clientes", "Portal privado por cliente"],
+    storeFeePercent: 15,
   },
   medium: {
     id: "medium",
@@ -48,6 +51,7 @@ export const PLANS: Record<PlanId, Plan> = {
     lookupKey: "hidopa_medium_monthly_v1",
     stripeProductId: "hidopa_cloud_medium",
     highlights: ["250 GB de almacenamiento", "Clientes ilimitados", "Portal privado por cliente"],
+    storeFeePercent: 10,
   },
   high: {
     id: "high",
@@ -59,6 +63,7 @@ export const PLANS: Record<PlanId, Plan> = {
     lookupKey: "hidopa_high_monthly_v1",
     stripeProductId: "hidopa_cloud_high",
     highlights: ["1 TB de almacenamiento", "Clientes ilimitados", "Ideal para agencias"],
+    storeFeePercent: 0,
   },
 };
 

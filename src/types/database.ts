@@ -20,6 +20,11 @@ export type CreatorRow = {
   portal_access_until: string | null;
   storage_limit_bytes: number;
   client_limit: number | null;
+  /** Cuenta de cobros (Stripe Connect Express) para la tienda de impresiones. */
+  stripe_connect_account_id: string | null;
+  connect_payouts_enabled: boolean;
+  /** Margen por defecto sobre el costo del laboratorio (100 = duplica el costo). */
+  store_markup_percent: number;
   created_at: string;
   updated_at: string;
 }
@@ -47,6 +52,8 @@ export type ProjectRow = {
   /** Enlace público /g/{share_token} (solo galerías). */
   share_enabled: boolean;
   share_token: string | null;
+  /** Tienda de impresiones activada en esta galería. */
+  store_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -103,6 +110,123 @@ export type StripeEventRow = {
 
 type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
+export type PrintProductRow = {
+  id: string;
+  lab: string;
+  product_ref: string;
+  product_name: string;
+  category_ref: string;
+  category_name: string;
+  size_id: string;
+  size_label: string;
+  width_in: number | null;
+  height_in: number | null;
+  selections: Record<string, unknown>;
+  cost_cents: number;
+  resolution: number | null;
+  description: string | null;
+  sort: number;
+  active: boolean;
+  synced_at: string;
+  created_at: string;
+}
+
+export type CreatorProductPriceRow = {
+  creator_id: string;
+  product_id: string;
+  markup_percent: number | null;
+  enabled: boolean;
+  updated_at: string;
+}
+
+export type PrintOrderStatus =
+  | "pending_payment"
+  | "paid"
+  | "submitting"
+  | "in_production"
+  | "shipped"
+  | "canceled"
+  | "refunded"
+  | "failed";
+
+export type ShippingAddress = {
+  name: string;
+  addr1: string;
+  addr2?: string;
+  city: string;
+  state: string;
+  zip: string;
+  country: "US";
+};
+
+export type TrackingInfo = {
+  carrier: string | null;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+  shipDate: string | null;
+};
+
+export type PrintOrderRow = {
+  id: string;
+  reference: string;
+  creator_id: string;
+  project_id: string | null;
+  buyer_email: string;
+  buyer_name: string;
+  buyer_user_id: string | null;
+  shipping_address: ShippingAddress;
+  status: PrintOrderStatus;
+  subtotal_cents: number;
+  shipping_cents: number;
+  tax_cents: number;
+  total_cents: number;
+  lab_cost_cents: number;
+  platform_fee_percent: number;
+  platform_fee_cents: number;
+  processing_fee_cents: number;
+  creator_earnings_cents: number;
+  stripe_checkout_session_id: string | null;
+  stripe_payment_intent_id: string | null;
+  stripe_charge_id: string | null;
+  stripe_transfer_id: string | null;
+  lab: string;
+  lab_submission_id: string | null;
+  lab_confirmation_ids: string[];
+  tracking: TrackingInfo[];
+  failure_reason: string | null;
+  paid_at: string | null;
+  submitted_at: string | null;
+  shipped_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PrintOrderItemRow = {
+  id: string;
+  order_id: string;
+  creator_id: string;
+  product_id: string | null;
+  asset_id: string | null;
+  product_name: string;
+  size_label: string;
+  file_name: string;
+  selections: Record<string, unknown>;
+  quantity: number;
+  unit_price_cents: number;
+  unit_cost_cents: number;
+  lab_configured_product_id: string | null;
+  created_at: string;
+}
+
+export type LabEventRow = {
+  id: string;
+  lab: string;
+  event_type: string;
+  payload: unknown;
+  received_at: string;
+  processed_at: string | null;
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -119,6 +243,9 @@ export type Database = {
           | "portal_access_until"
           | "storage_limit_bytes"
           | "client_limit"
+          | "stripe_connect_account_id"
+          | "connect_payouts_enabled"
+          | "store_markup_percent"
           | "created_at"
           | "updated_at"
         >;
@@ -143,7 +270,7 @@ export type Database = {
         Row: ProjectRow;
         Insert: Optional<
           ProjectRow,
-          "id" | "client_id" | "status" | "design" | "share_enabled" | "share_token" | "created_at" | "updated_at"
+          "id" | "client_id" | "status" | "design" | "share_enabled" | "share_token" | "store_enabled" | "created_at" | "updated_at"
         >;
         Update: Partial<ProjectRow>;
         Relationships: [
@@ -212,6 +339,79 @@ export type Database = {
         Row: StripeEventRow;
         Insert: Optional<StripeEventRow, "received_at" | "processed_at">;
         Update: Partial<StripeEventRow>;
+        Relationships: [];
+      };
+      print_products: {
+        Row: PrintProductRow;
+        Insert: Optional<
+          PrintProductRow,
+          "id" | "width_in" | "height_in" | "selections" | "resolution" | "description" | "sort" | "active" | "synced_at" | "created_at"
+        >;
+        Update: Partial<PrintProductRow>;
+        Relationships: [];
+      };
+      creator_product_prices: {
+        Row: CreatorProductPriceRow;
+        Insert: Optional<CreatorProductPriceRow, "markup_percent" | "enabled" | "updated_at">;
+        Update: Partial<CreatorProductPriceRow>;
+        Relationships: [];
+      };
+      print_orders: {
+        Row: PrintOrderRow;
+        Insert: Optional<
+          PrintOrderRow,
+          | "id"
+          | "project_id"
+          | "buyer_user_id"
+          | "status"
+          | "tax_cents"
+          | "total_cents"
+          | "platform_fee_cents"
+          | "processing_fee_cents"
+          | "creator_earnings_cents"
+          | "stripe_checkout_session_id"
+          | "stripe_payment_intent_id"
+          | "stripe_charge_id"
+          | "stripe_transfer_id"
+          | "lab_submission_id"
+          | "lab_confirmation_ids"
+          | "tracking"
+          | "failure_reason"
+          | "paid_at"
+          | "submitted_at"
+          | "shipped_at"
+          | "created_at"
+          | "updated_at"
+        >;
+        Update: Partial<PrintOrderRow>;
+        Relationships: [
+          {
+            foreignKeyName: "print_orders_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      print_order_items: {
+        Row: PrintOrderItemRow;
+        Insert: Optional<PrintOrderItemRow, "id" | "product_id" | "asset_id" | "lab_configured_product_id" | "created_at">;
+        Update: Partial<PrintOrderItemRow>;
+        Relationships: [
+          {
+            foreignKeyName: "print_order_items_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: false;
+            referencedRelation: "print_orders";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      lab_events: {
+        Row: LabEventRow;
+        Insert: Optional<LabEventRow, "received_at" | "processed_at">;
+        Update: Partial<LabEventRow>;
         Relationships: [];
       };
     };

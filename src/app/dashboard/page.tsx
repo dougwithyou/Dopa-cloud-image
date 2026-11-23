@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireCreator } from "@/lib/auth";
 import { loadProjectCovers } from "@/lib/project-covers";
 import { ProjectFolder } from "@/components/dashboard/folder";
-import { ArrowRightIcon, FolderPlusIcon, FoldersIcon, MailIcon, PlusIcon, UserPlusIcon } from "@/components/icons";
+import { ArrowRightIcon, BagIcon, FolderPlusIcon, FoldersIcon, MailIcon, PlusIcon, UserPlusIcon } from "@/components/icons";
 
 export const metadata = { title: "Inicio" };
 
@@ -30,6 +30,12 @@ const ACTIONS = [
     title: "Contactos",
     description: "Correos captados en tus galerías compartidas.",
     Icon: MailIcon,
+  },
+  {
+    href: "/dashboard/store",
+    title: "Tienda y ventas",
+    description: "Impresiones y cuadros que tus clientes compran.",
+    Icon: BagIcon,
   },
 ] as const;
 
@@ -97,7 +103,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
       <section className="rounded-[30px] bg-white p-3 sm:p-4">
         <h2 className="px-3 pt-2 pb-3 text-xl tracking-tight sm:text-2xl">¿Qué quieres hacer hoy?</h2>
-        <nav className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" aria-label="Acciones principales">
+        <nav className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5" aria-label="Acciones principales">
           {ACTIONS.map(({ href, title, description, Icon }, i) => (
             <Link
               key={href}

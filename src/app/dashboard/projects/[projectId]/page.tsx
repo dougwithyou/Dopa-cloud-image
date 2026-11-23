@@ -20,7 +20,8 @@ import {
 import { CopyButton } from "@/components/copy-button";
 import { shareUrl } from "@/lib/share";
 import { PostCard, type EditorAsset, type EditorPost } from "./post-card";
-import { EyeIcon, ImageIcon, LinkIcon } from "@/components/icons";
+import { BagIcon, EyeIcon, ImageIcon, LinkIcon } from "@/components/icons";
+import { setProjectStore } from "../../store/actions";
 import { MediaLibrary, type LibraryItem } from "./media-library";
 import { FeedGridEditor } from "./feed-grid-editor";
 import { BackLink } from "@/components/back-home";
@@ -34,7 +35,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
 
   const { data: project } = await supabase
     .from("projects")
-    .select("id, title, type, status, client_id, share_enabled, share_token, clients(name, email, user_id, invited_at)")
+    .select("id, title, type, status, client_id, share_enabled, share_token, store_enabled, clients(name, email, user_id, invited_at)")
     .eq("id", projectId)
     .maybeSingle();
   if (!project) notFound();
@@ -276,6 +277,38 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
               </form>
             </div>
           ) : null}
+        </section>
+      ) : null}
+
+      {project.type === "photo_session" ? (
+        <section className="card p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 font-semibold">
+                <BagIcon className="h-4 w-4" /> Tienda de impresiones
+              </h2>
+              <p className="mt-1 max-w-xl text-sm text-neutral-500">
+                {project.store_enabled
+                  ? "Activa: tus clientes ven “Comprar impresión” en cada foto. El laboratorio produce y envía; tú recibes tu ganancia."
+                  : "Deja que tus clientes compren impresiones y cuadros de estas fotos, con tu margen."}{" "}
+                <Link href="/dashboard/store" className="font-semibold text-neutral-900 underline">
+                  Precios y cobros
+                </Link>
+              </p>
+              {project.store_enabled && !creator.connect_payouts_enabled ? (
+                <p className="mt-2 text-sm text-amber-700">
+                  Falta conectar tus cobros: hasta entonces la tienda no se muestra a tus clientes.
+                </p>
+              ) : null}
+            </div>
+            <form action={setProjectStore}>
+              <input type="hidden" name="projectId" value={project.id} />
+              <input type="hidden" name="enabled" value={project.store_enabled ? "false" : "true"} />
+              <SubmitButton className={project.store_enabled ? "btn-secondary" : "btn-primary"} pendingLabel="…">
+                {project.store_enabled ? "Desactivar" : "Activar tienda"}
+              </SubmitButton>
+            </form>
+          </div>
         </section>
       ) : null}
 

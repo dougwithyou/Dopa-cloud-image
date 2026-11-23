@@ -9,7 +9,9 @@
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "stripe:setup": "node --experimental-strip-types scripts/stripe-setup.ts",
-    "test:db": "node supabase/tests/rls.test.mjs supabase/migrations/*.sql"
+    "whcc:subscribe": "node --experimental-strip-types scripts/whcc-subscribe.ts",
+    "test:db": "node supabase/tests/rls.test.mjs supabase/migrations/*.sql",
+    "test:unit": "node --experimental-strip-types --test src/lib/print-pricing.test.ts src/lib/labs/whcc-selections.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1169.0",

@@ -5,6 +5,8 @@ import { DownloadAllButton } from "@/components/download-all-button";
 import { downloadHref as defaultDownloadHref, type FeedMedia } from "@/components/feed-post";
 import { pad, slugify, type ZipEntry } from "@/lib/zip-download";
 import { SaveToPhotosButton, useSaveToPhotosPlatform } from "@/components/save-to-photos";
+import { BuyPrintDialog, CartButton } from "@/components/store/buy-print-dialog";
+import { isPrintable, type StoreConfig } from "@/lib/store-types";
 import {
   FONTS,
   GAP_PX,
@@ -52,20 +54,25 @@ function Lightbox({
   onClose,
   onNavigate,
   hrefFor,
+  store,
 }: {
   items: FeedMedia[];
   index: number;
   onClose: () => void;
   onNavigate: (i: number) => void;
   hrefFor: (id: string) => string;
+  store?: StoreConfig | null;
 }) {
   const item = items[index];
+  const [buying, setBuying] = useState(false);
+  const canBuy = Boolean(store) && isPrintable(item);
   const touchX = useRef<number | null>(null);
   const prev = () => index > 0 && onNavigate(index - 1);
   const next = () => index < items.length - 1 && onNavigate(index + 1);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (buying) return;
       if (e.key === "Escape") onClose();
       if (e.key === "ArrowRight") next();
       if (e.key === "ArrowLeft") prev();
@@ -98,16 +105,25 @@ function Lightbox({
           {index + 1} / {items.length}
         </span>
         <div className="flex items-center gap-2">
+          {canBuy ? (
+            <button
+              type="button"
+              onClick={() => setBuying(true)}
+              className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-neutral-900"
+            >
+              Comprar impresión
+            </button>
+          ) : null}
           <SaveToPhotosButton
             media={[item]}
-            className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-neutral-900"
+            className={canBuy ? "rounded-full border border-white/30 px-3 py-1.5 text-xs hover:bg-white/10" : "rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-neutral-900"}
           />
           <a
             href={hrefFor(item.id)}
             download
             className="inline-flex items-center gap-2 rounded-full border border-white/30 px-3 py-1.5 text-xs hover:bg-white/10"
           >
-            <DownloadIcon /> Descargar
+            <DownloadIcon /> <span className={canBuy ? "hidden sm:inline" : ""}>Descargar</span>
           </a>
           <button type="button" onClick={onClose} aria-label="Cerrar" className="px-2 text-3xl leading-none text-white/80 hover:text-white">
             ×
@@ -143,6 +159,7 @@ function Lightbox({
           </button>
         ) : null}
       </div>
+      {buying && store ? <BuyPrintDialog media={item} store={store} onClose={() => setBuying(false)} /> : null}
     </div>
   );
 }
@@ -308,6 +325,7 @@ export function PhotoGalleryTemplate({
   scenes = [],
   design,
   downloadBase,
+  store,
 }: {
   title: string;
   authorName: string;
@@ -322,6 +340,8 @@ export function PhotoGalleryTemplate({
    * "/api/share/TOKEN/download/". Por defecto, la descarga con sesión.
    */
   downloadBase?: string;
+  /** Tienda de impresiones de la galería (si el fotógrafo la activó). */
+  store?: StoreConfig | null;
 }) {
   const palette = PALETTES[design.palette];
   const [open, setOpen] = useState<number | null>(null);
@@ -368,6 +388,12 @@ export function PhotoGalleryTemplate({
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          {store ? (
+            <CartButton
+              store={store}
+              className="btn shrink-0 rounded-none border border-current px-3 py-2 text-[11px] uppercase tracking-widest"
+            />
+          ) : null}
           <SaveToPhotosButton
             media={ordered}
             label="Guardar en Fotos"
@@ -420,7 +446,7 @@ export function PhotoGalleryTemplate({
         {authorName}
       </footer>
 
-      {open !== null ? <Lightbox items={ordered} index={open} onClose={() => setOpen(null)} onNavigate={setOpen} hrefFor={hrefFor} /> : null}
+      {open !== null ? <Lightbox items={ordered} index={open} onClose={() => setOpen(null)} onNavigate={setOpen} hrefFor={hrefFor} store={store} /> : null}
     </div>
   );
 }
