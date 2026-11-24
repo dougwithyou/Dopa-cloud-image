@@ -78,12 +78,18 @@ export function resolveSelections(fields: WhccField[], chosen: Record<string, st
   return result;
 }
 
+const SPECIAL_SIZES = new Set(["custom", "wallet", "mini_snapshot"]);
+
 /** El campo que define el tamaño y sus valores habilitados con medidas. */
 export function sizeOptions(fields: WhccField[], sizedBy: string[] | undefined): { field: string; values: WhccFieldValue[] } | null {
   const name = sizedBy?.[0];
   if (!name) return null;
   const f = fields.find((x) => x.field === name && x.kind === "enum");
   if (!f) return null;
-  const values = (f.values ?? []).filter((v) => v.enabled !== false && v.id !== "custom");
+  // Solo tamaños con medidas; se omiten el tamaño libre y los formatos especiales
+  // (hojas de 8 fotos tamaño cartera, mini instantáneas).
+  const values = (f.values ?? []).filter(
+    (v) => v.enabled !== false && !SPECIAL_SIZES.has(v.id) && typeof v.width === "number" && typeof v.height === "number",
+  );
   return values.length > 0 ? { field: f.field, values } : null;
 }

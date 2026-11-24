@@ -12,6 +12,8 @@ import type { ShippingAddress } from "@/types/database";
 export const WHCC_API_VERSION = "2026-10";
 export const LAB_ID = "whcc";
 
+const DEFAULT_CATEGORIES = "prints,wall-art,display-products";
+
 /** Imagen pública de prueba de la documentación de WHCC, usada para cotizar el catálogo. */
 const DEFAULT_SAMPLE_IMAGE =
   "https://whcc-platform-test-assets.s3.us-east-2.amazonaws.com/0dd4751480afa9ec95e01c04acdd376f_2509_3357.jpg";
@@ -142,8 +144,10 @@ async function buildConfigured(entries: BuildEntry[]) {
  */
 export async function fetchCatalog(): Promise<CatalogVariant[]> {
   const sample = process.env.WHCC_SAMPLE_IMAGE_URL || DEFAULT_SAMPLE_IMAGE;
-  const allow = (process.env.WHCC_CATEGORY_REFS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  const products = (await listApiProducts()).filter((p) => allow.length === 0 || allow.includes(p.category.ref));
+  // Por defecto: impresiones, cuadros y bloques/displays. Se dejan fuera
+  // muestras, accesorios, pancartas y las impresiones "retail ready".
+  const allow = (process.env.WHCC_CATEGORY_REFS || DEFAULT_CATEGORIES).split(",").map((s) => s.trim()).filter(Boolean);
+  const products = (await listApiProducts()).filter((p) => allow.includes(p.category.ref));
 
   const pending: { variant: Omit<CatalogVariant, "cost_cents">; entry: BuildEntry }[] = [];
   let sort = 0;

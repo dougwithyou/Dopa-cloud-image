@@ -12,6 +12,8 @@ const framed: WhccField[] = [
       { id: "5x7", enabled: true, width: 5, height: 7 },
       { id: "8x10", enabled: true, width: 8, height: 10 },
       { id: "40x60", enabled: false, width: 40, height: 60 },
+      { id: "wallet", enabled: true, width: 2.5, height: 3.5 },
+      { id: "custom", enabled: true },
     ],
     default: "8x10",
   },
