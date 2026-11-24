@@ -7,7 +7,8 @@ import type { CreatorRow } from "@/types/database";
 /**
  * Cuenta de cobros del fotógrafo (Stripe Connect Express). La plataforma cobra
  * al cliente y, cuando el pedido se envía, transfiere al fotógrafo su ganancia.
- * Solo se necesita la capacidad "transfers".
+ * Se piden "transfers" y "card_payments": Stripe no permite cuentas solo con
+ * transfers sin una aprobación especial de la plataforma.
  */
 export async function connectOnboardingUrl(creator: CreatorRow, email: string | null): Promise<string> {
   let accountId = creator.stripe_connect_account_id;
@@ -17,14 +18,14 @@ export async function connectOnboardingUrl(creator: CreatorRow, email: string | 
         type: "express",
         country: "US",
         email: email ?? undefined,
-        capabilities: { transfers: { requested: true } },
+        capabilities: { transfers: { requested: true }, card_payments: { requested: true } },
         business_profile: {
           name: creator.business_name,
           product_description: "Fotografía profesional e impresiones para sus clientes",
         },
         metadata: { creator_id: creator.id },
       },
-      { idempotencyKey: `connect-account-${creator.id}` },
+      { idempotencyKey: `connect-account-v2-${creator.id}` },
     );
     accountId = account.id;
     await createAdminClient().from("creators").update({ stripe_connect_account_id: accountId }).eq("id", creator.id);
