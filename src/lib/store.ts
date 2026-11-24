@@ -24,10 +24,11 @@ export async function loadStoreProducts(admin: Admin, creator: Pick<CreatorRow, 
     admin.from("creator_product_prices").select("product_id, markup_percent, enabled").eq("creator_id", creator.id),
   ]);
   const byProduct = new Map((overrides ?? []).map((o) => [o.product_id, o]));
-  const list: (StoreProduct & { costCents: number; selections: Record<string, unknown> })[] = [];
+  const list: (StoreProduct & { costCents: number; selections: Record<string, unknown>; markupPercent: number })[] = [];
   for (const p of products ?? []) {
     const o = byProduct.get(p.id);
     if (o && !o.enabled) continue;
+    const markupPercent = o?.markup_percent ?? creator.store_markup_percent;
     list.push({
       id: p.id,
       productRef: p.product_ref,
@@ -37,11 +38,16 @@ export async function loadStoreProducts(admin: Admin, creator: Pick<CreatorRow, 
       sizeLabel: p.size_label,
       widthIn: p.width_in === null ? null : Number(p.width_in),
       heightIn: p.height_in === null ? null : Number(p.height_in),
-      priceCents: retailPriceCents(p.cost_cents, o?.markup_percent ?? creator.store_markup_percent),
+      priceCents: retailPriceCents(p.cost_cents, markupPercent),
       resolution: p.resolution,
       description: p.description,
+      kind: p.kind,
+      completion: p.completion,
+      minQuantity: p.min_quantity,
+      quantityStep: p.quantity_step,
       costCents: p.cost_cents,
       selections: p.selections,
+      markupPercent,
     });
   }
   return list;
@@ -49,7 +55,7 @@ export async function loadStoreProducts(admin: Admin, creator: Pick<CreatorRow, 
 
 /** Quita lo que no debe llegar al navegador. */
 export function publicProducts(list: Awaited<ReturnType<typeof loadStoreProducts>>): StoreProduct[] {
-  return list.map(({ costCents: _c, selections: _s, ...rest }) => rest);
+  return list.map(({ costCents: _c, selections: _s, markupPercent: _m, ...rest }) => rest);
 }
 
 export type StoreRole = "creator" | "client" | "visitor";

@@ -587,5 +587,57 @@ await db.exec(`reset role; update public.projects set type = 'monthly_content', 
   await db.exec(`update public.projects set store_enabled = false where id = '${pA2pub}'`);
 }
 
+// ---------- Diseños del editor (photobooks y tarjetas) ----------
+{
+  const prod = await db.query(`
+    insert into public.print_products (lab, product_ref, product_name, category_ref, category_name, size_id, size_label, cost_cents, completion, kind, min_quantity, quantity_step)
+    values ('whcc','5x7-vertical-flat-card','Tarjeta','press-printed-cards','Tarjetas','5x7','5×7', 112, 'editor', 'card', 25, 5)
+    returning id`);
+  const cardId = prod.rows[0].id;
+  await db.exec(`insert into public.print_editor_items (creator_id, project_id, product_id, configured_product_id, return_token)
+                 values ('${cA}','${pA2pub}','${cardId}','CF_test_1','tok')`);
+  check(
+    "Tarjetas: cantidad mínima inválida rechazada",
+    (await fails(`update public.print_products set min_quantity = 0 where id = '${cardId}'`)) !== null,
+  );
+  check(
+    "Tipo de producto inválido rechazado",
+    (await fails(`update public.print_products set kind = 'mug' where id = '${cardId}'`)) !== null,
+  );
+  {
+    const o = await db.query(`select id from public.print_orders limit 1`);
+    const ok = await fails(`insert into public.print_order_items (order_id, creator_id, product_name, size_label, file_name, selections, quantity, unit_price_cents, unit_cost_cents)
+      values ('${o.rows[0].id}','${cA}','Tarjeta','5×7','x','{}', 250, 199, 112)`);
+    check("Pedido de 250 tarjetas permitido", ok === null, ok ?? "");
+    check(
+      "Cantidad fuera de rango rechazada",
+      (await fails(`insert into public.print_order_items (order_id, creator_id, product_name, size_label, file_name, selections, quantity, unit_price_cents, unit_cost_cents)
+        values ('${o.rows[0].id}','${cA}','x','x','x','{}', 6000, 1, 1)`)) !== null,
+    );
+  }
+  await as(U.creatorA, async () => {
+    check("Creador ve sus diseños del editor", (await db.query(`select id from public.print_editor_items`)).rows.length === 1);
+    check(
+      "Creador no puede marcar un diseño como terminado",
+      /permission denied/.test(await fails(`update public.print_editor_items set finished = true`)),
+    );
+    check(
+      "Creador no puede crear diseños directamente",
+      /permission denied/.test(
+        await fails(`insert into public.print_editor_items (creator_id, project_id, product_id, configured_product_id) values ('${cA}','${pA2pub}','${cardId}','x')`),
+      ),
+    );
+  });
+  await as(U.creatorB, async () => {
+    check("Otro creador no ve esos diseños", (await db.query(`select id from public.print_editor_items`)).rows.length === 0);
+  });
+  await as(U.clientA2, async () => {
+    check("Cliente no ve diseños (ni tokens)", (await db.query(`select id from public.print_editor_items`)).rows.length === 0);
+  });
+  await db.exec(`set role anon;`);
+  check("anon no lee diseños", /permission denied/.test(await fails(`select * from public.print_editor_items`)));
+  await db.exec(`reset role;`);
+}
+
 console.log(failures === 0 ? "\nTODAS LAS PRUEBAS PASARON" : `\n${failures} PRUEBAS FALLARON`);
 process.exit(failures === 0 ? 0 : 1);

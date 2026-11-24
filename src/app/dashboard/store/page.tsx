@@ -144,6 +144,7 @@ export default async function StorePage({ searchParams }: { searchParams: Promis
         <h2 className="text-2xl tracking-tight">Lista de precios</h2>
         <p className="mt-1 text-sm text-neutral-500">
           Precios redondeados a .99. Puedes poner un margen distinto por producto o quitarlo de tu tienda. El envío se cobra aparte, al costo.
+          En photobooks el precio final depende de las páginas que agregue tu cliente; tu margen se aplica igual.
         </p>
 
         {catalogEmpty ? (
@@ -163,7 +164,8 @@ export default async function StorePage({ searchParams }: { searchParams: Promis
                     <span className="min-w-0">
                       <span className="block font-medium">{g.name}</span>
                       <span className="block text-xs text-neutral-500">
-                        {g.category} · {g.rows.length} {g.rows.length === 1 ? "tamaño" : "tamaños"} · desde{" "}
+                        {g.category} · {g.rows[0].kind === "card" ? `mínimo ${g.rows[0].min_quantity}, precio por tarjeta` : `${g.rows.length} ${g.rows.length === 1 ? "tamaño" : "tamaños"}`}
+                        {g.rows[0].completion === "editor" ? " · el cliente lo diseña en el editor" : ""} · desde{" "}
                         {formatUsd(Math.min(...g.rows.map((r) => retailPriceCents(r.cost_cents, markup))))}
                       </span>
                     </span>
@@ -202,7 +204,7 @@ export default async function StorePage({ searchParams }: { searchParams: Promis
                         <thead className="text-left text-xs text-neutral-500">
                           <tr>
                             <th className="py-2 font-medium">Tamaño</th>
-                            <th className="py-2 font-medium">Costo lab</th>
+                            <th className="py-2 font-medium">{g.rows[0].completion === "editor" ? "Costo lab (desde)" : "Costo lab"}</th>
                             <th className="py-2 font-medium">Tu precio</th>
                             <th className="py-2 font-medium">Tu ganancia aprox.</th>
                           </tr>

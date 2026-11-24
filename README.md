@@ -292,8 +292,17 @@ llave live y pon `WHCC_API_KEY` (live), `WHCC_ENV=live` y `WHCC_ALLOW_LIVE=true`
 vuelve a ejecutar `whcc:subscribe` con la llave live. Envía tu certificado de
 reventa a billing@whcc.com para que WHCC no cobre impuesto sobre el costo.
 
-**Por ahora** se venden impresiones y cuadros (productos de una sola foto).
-Tarjetas y photobooks usan el editor de WHCC y se agregan en una etapa siguiente.
+**Catálogo curado** (`src/lib/print-offerings.ts`): impresiones en papel
+fotográfico (4×6 a 20×30), canvas gallery wrap (8×10 a 24×36), photobooks
+(tapa dura, tapa blanda y layflat) y tarjetas 5×7 planas o dobladas (mínimo 25).
+Para cambiar lo que se vende, edita esa lista; el cron la sincroniza.
+
+**Photobooks y tarjetas** se diseñan en el editor de WHCC: el botón *Tienda*
+de la galería crea el producto con las fotos de la galería en la bandeja
+(`/api/store/editor`), el cliente lo diseña y vuelve a
+`/tienda/{galería}/editor-listo` (token de un solo uso), donde se comprueba con
+`calculate` que esté terminado antes de pasar al carrito. Al pagar se recotiza
+con WHCC (páginas, cantidad y envío por pieza).
 
 ## Paso a producción (modo live)
 

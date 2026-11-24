@@ -6,6 +6,7 @@ import { downloadHref as defaultDownloadHref, type FeedMedia } from "@/component
 import { pad, slugify, type ZipEntry } from "@/lib/zip-download";
 import { SaveToPhotosButton, useSaveToPhotosPlatform } from "@/components/save-to-photos";
 import { BuyPrintDialog, CartButton } from "@/components/store/buy-print-dialog";
+import { StoreSheet } from "@/components/store/store-sheet";
 import { isPrintable, type StoreConfig } from "@/lib/store-types";
 import {
   FONTS,
@@ -65,7 +66,7 @@ function Lightbox({
 }) {
   const item = items[index];
   const [buying, setBuying] = useState(false);
-  const canBuy = Boolean(store) && isPrintable(item);
+  const canBuy = Boolean(store?.products.some((p) => p.completion === "api")) && isPrintable(item);
   const touchX = useRef<number | null>(null);
   const prev = () => index > 0 && onNavigate(index - 1);
   const next = () => index < items.length - 1 && onNavigate(index + 1);
@@ -345,6 +346,7 @@ export function PhotoGalleryTemplate({
 }) {
   const palette = PALETTES[design.palette];
   const [open, setOpen] = useState<number | null>(null);
+  const [shopping, setShopping] = useState(false);
   const hrefFor = (id: string) => (downloadBase ? `${downloadBase}${id}` : defaultDownloadHref(id));
 
   // Secciones: escenas con fotos y, al final, las fotos sin escena.
@@ -378,8 +380,8 @@ export function PhotoGalleryTemplate({
 
       {/* Barra con escenas y descarga */}
       <div id="galeria" className="sticky top-0 z-20 border-b backdrop-blur" style={{ background: `${palette.bg}f2`, borderColor: palette.accent }}>
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-8">
-          <div className="min-w-0">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:flex-nowrap sm:px-8">
+          <div className={`min-w-0 ${store ? "basis-full sm:basis-auto" : ""}`}>
             <p className="truncate text-lg" style={ts}>
               {title}
             </p>
@@ -388,6 +390,15 @@ export function PhotoGalleryTemplate({
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          {store ? (
+            <button
+              type="button"
+              onClick={() => setShopping(true)}
+              className="btn shrink-0 rounded-none border border-current px-3 py-2 text-[11px] uppercase tracking-widest"
+            >
+              Tienda
+            </button>
+          ) : null}
           {store ? (
             <CartButton
               store={store}
@@ -447,6 +458,7 @@ export function PhotoGalleryTemplate({
       </footer>
 
       {open !== null ? <Lightbox items={ordered} index={open} onClose={() => setOpen(null)} onNavigate={setOpen} hrefFor={hrefFor} store={store} /> : null}
+      {shopping && store ? <StoreSheet store={store} onClose={() => setShopping(false)} /> : null}
     </div>
   );
 }

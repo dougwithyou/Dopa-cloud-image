@@ -156,13 +156,18 @@ export async function fulfillOrder(orderId: string): Promise<void> {
 
   try {
     if (!order.lab_submission_id) {
-      // 1. Armar (solo lo que falta)
-      if (items.some((i) => !i.lab_configured_product_id)) {
-        const assetIds = items.map((i) => i.asset_id).filter((x): x is string => Boolean(x));
+      // 1. Armar las fotos impresas que falten. Los diseños del editor
+      //    (photobooks, tarjetas) ya vienen armados y revisados al pagar.
+      const toBuild = items.filter((i) => !i.lab_configured_product_id && !i.editor_item_id);
+      if (items.some((i) => !i.lab_configured_product_id && i.editor_item_id)) {
+        return failOrder(order.id, "Falta el diseño de un producto personalizado.");
+      }
+      if (toBuild.length > 0) {
+        const assetIds = toBuild.map((i) => i.asset_id).filter((x): x is string => Boolean(x));
         const { data: assets } = await db.from("assets").select("id, r2_key").in("id", assetIds);
         const keyOf = new Map((assets ?? []).map((a) => [a.id, a.r2_key]));
         const lines = [];
-        for (const item of items) {
+        for (const item of toBuild) {
           const key = item.asset_id ? keyOf.get(item.asset_id) : undefined;
           if (!key) return failOrder(order.id, `La foto ${item.file_name} ya no existe.`);
           lines.push({
@@ -173,18 +178,20 @@ export async function fulfillOrder(orderId: string): Promise<void> {
           });
         }
         const ids = await buildOrderItems(lines);
-        await Promise.all(items.map((item, i) => db.from("print_order_items").update({ lab_configured_product_id: ids[i] }).eq("id", item.id)));
-        items.forEach((item, i) => (item.lab_configured_product_id = ids[i]));
+        await Promise.all(toBuild.map((item, i) => db.from("print_order_items").update({ lab_configured_product_id: ids[i] }).eq("id", item.id)));
+        toBuild.forEach((item, i) => (item.lab_configured_product_id = ids[i]));
       }
 
-      // 2. Esperar a que WHCC procese las imágenes
-      const ids = items.map((i) => i.lab_configured_product_id as string);
-      const status = await waitForItems(ids);
-      if (status.failed.length > 0) {
-        const bad = items.find((i) => i.lab_configured_product_id === status.failed[0].id);
-        return failOrder(order.id, `El laboratorio no pudo procesar ${bad?.file_name ?? "una foto"}: ${status.failed[0].message}`);
+      // 2. Esperar a que WHCC procese las imágenes de las fotos impresas
+      const photoIds = items.filter((i) => !i.editor_item_id).map((i) => i.lab_configured_product_id as string);
+      if (photoIds.length > 0) {
+        const status = await waitForItems(photoIds);
+        if (status.failed.length > 0) {
+          const bad = items.find((i) => i.lab_configured_product_id === status.failed[0].id);
+          return failOrder(order.id, `El laboratorio no pudo procesar ${bad?.file_name ?? "una foto"}: ${status.failed[0].message}`);
+        }
+        if (!status.ready) return; // sigue en "submitting"; el cron lo reintenta
       }
-      if (!status.ready) return; // sigue en "submitting"; el cron lo reintenta
 
       // 3. Enviar
       const submission = await submitOrder({

@@ -22,7 +22,8 @@ export function BuyPrintDialog({ media, store, onClose }: { media: FeedMedia; st
   const cart = useCart(store.projectId);
   const categories = useMemo(() => {
     const map = new Map<string, { ref: string; name: string; products: StoreProduct[] }>();
-    for (const p of store.products) {
+    // Desde una foto solo se piden productos de una foto (impresiones y canvas).
+    for (const p of store.products.filter((x) => x.completion === "api")) {
       const c = map.get(p.categoryRef) ?? { ref: p.categoryRef, name: p.categoryName, products: [] };
       c.products.push(p);
       map.set(p.categoryRef, c);

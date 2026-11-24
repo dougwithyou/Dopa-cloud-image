@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { appUrl } from "@/lib/env";
-import { LAB_ID } from "@/lib/labs/whcc";
+import { calculateItems, LAB_ID, WhccError } from "@/lib/labs/whcc";
+import { normalizeQuantity } from "@/lib/print-offerings";
 import { PLANS } from "@/lib/plans";
-import { quoteOrder, shippingCentsFor } from "@/lib/print-pricing";
+import { quoteOrder, retailPriceCents, shippingCentsFor } from "@/lib/print-pricing";
 import { stripe } from "@/lib/stripe";
 import { getStoreAccess, loadStoreProducts, newOrderReference, orderUrl } from "@/lib/store";
 import { MAX_CART_LINES, MAX_LINE_QUANTITY, US_STATES, isPrintable } from "@/lib/store-types";
@@ -17,7 +18,13 @@ const STATE_CODES = new Set(US_STATES.map(([code]) => code));
 const Body = z.object({
   projectId: z.uuid(),
   items: z
-    .array(z.object({ productId: z.uuid(), assetId: z.uuid(), quantity: z.number().int().min(1).max(MAX_LINE_QUANTITY) }))
+    .array(
+      z.union([
+        z.object({ productId: z.uuid(), assetId: z.uuid(), quantity: z.number().int().min(1).max(MAX_LINE_QUANTITY) }),
+        // Diseño del editor (photobook o tarjetas: hasta 5000 tarjetas).
+        z.object({ productId: z.uuid(), editorItemId: z.uuid(), quantity: z.number().int().min(1).max(5000) }),
+      ]),
+    )
     .min(1)
     .max(MAX_CART_LINES),
   buyer: z.object({
@@ -49,30 +56,132 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminClient();
   const products = new Map((await loadStoreProducts(admin, access.creator)).map((p) => [p.id, p]));
-  const assetIds = [...new Set(items.map((i) => i.assetId))];
-  const { data: assets } = await admin
-    .from("assets")
-    .select("id, kind, file_name, size_bytes")
-    .in("id", assetIds)
-    .eq("project_id", projectId)
-    .eq("upload_status", "complete");
-  const assetById = new Map((assets ?? []).map((a) => [a.id, a]));
 
-  const lines = [];
-  for (const item of items) {
+  // Líneas normalizadas: precio y costo siempre calculados aquí.
+  type Line = {
+    productId: string;
+    name: string;
+    sizeLabel: string;
+    detail: string;
+    categoryRef: string;
+    quantity: number;
+    unitPriceCents: number;
+    unitCostCents: number;
+    selections: Record<string, unknown>;
+    assetId: string | null;
+    editorItemId: string | null;
+    configuredProductId: string | null;
+  };
+  const lines: Line[] = [];
+
+  // 1. Fotos impresas (impresiones y canvas)
+  const photoItems = items.filter((i): i is Extract<typeof i, { assetId: string }> => "assetId" in i);
+  const { data: assets } = photoItems.length
+    ? await admin
+        .from("assets")
+        .select("id, kind, file_name, size_bytes")
+        .in("id", [...new Set(photoItems.map((i) => i.assetId))])
+        .eq("project_id", projectId)
+        .eq("upload_status", "complete")
+    : { data: [] };
+  const assetById = new Map((assets ?? []).map((a) => [a.id, a]));
+  for (const item of photoItems) {
     const product = products.get(item.productId);
     const asset = assetById.get(item.assetId);
-    if (!product || !asset) return NextResponse.json({ error: "Un producto o una foto del carrito ya no está disponible." }, { status: 409 });
+    if (!product || !asset || product.completion !== "api") {
+      return NextResponse.json({ error: "Un producto o una foto del carrito ya no está disponible." }, { status: 409 });
+    }
     if (!isPrintable({ ...asset, size_bytes: Number(asset.size_bytes) })) {
       return NextResponse.json({ error: `La foto ${asset.file_name} no se puede imprimir.` }, { status: 409 });
     }
-    lines.push({ item, product, asset });
+    lines.push({
+      productId: product.id,
+      name: product.productName,
+      sizeLabel: product.sizeLabel,
+      detail: asset.file_name,
+      categoryRef: product.categoryRef,
+      quantity: item.quantity,
+      unitPriceCents: product.priceCents,
+      unitCostCents: product.costCents,
+      selections: { ...product.selections, __product_ref: product.productRef },
+      assetId: asset.id,
+      editorItemId: null,
+      configuredProductId: null,
+    });
   }
 
-  const groups = new Set(lines.map((l) => l.product.categoryRef)).size;
-  const shippingCents = shippingCentsFor(groups);
+  // 2. Diseños del editor (photobooks y tarjetas): deben estar terminados; el
+  //    costo real (páginas, cantidad) lo da WHCC.
+  const designItems = items.filter((i): i is Extract<typeof i, { editorItemId: string }> => "editorItemId" in i);
+  let designShippingCents = 0;
+  if (designItems.length > 0) {
+    const { data: rows } = await admin
+      .from("print_editor_items")
+      .select("id, product_id, configured_product_id, finished")
+      .in("id", designItems.map((i) => i.editorItemId))
+      .eq("project_id", projectId);
+    const rowById = new Map((rows ?? []).map((r) => [r.id, r]));
+    const toQuote: { configuredProductId: string; quantity: number }[] = [];
+    const pendingDesigns: { item: (typeof designItems)[number]; product: NonNullable<ReturnType<typeof products.get>>; configuredProductId: string; quantity: number }[] = [];
+    for (const item of designItems) {
+      const row = rowById.get(item.editorItemId);
+      const product = products.get(item.productId);
+      if (!row || !product || row.product_id !== product.id || product.completion !== "editor") {
+        return NextResponse.json({ error: "Un diseño del carrito ya no está disponible." }, { status: 409 });
+      }
+      if (!row.finished) {
+        return NextResponse.json({ error: `Termina tu diseño de ${product.productName} antes de pagar.` }, { status: 409 });
+      }
+      const quantity =
+        product.kind === "card" ? normalizeQuantity(item.quantity, product.minQuantity, product.quantityStep) : Math.min(10, item.quantity);
+      toQuote.push({ configuredProductId: row.configured_product_id, quantity });
+      pendingDesigns.push({ item, product, configuredProductId: row.configured_product_id, quantity });
+    }
+    let quoted: Awaited<ReturnType<typeof calculateItems>>;
+    try {
+      quoted = await calculateItems(toQuote, {
+        name: buyer.name,
+        addr1: address.addr1,
+        ...(address.addr2 ? { addr2: address.addr2 } : {}),
+        city: address.city,
+        state: address.state,
+        zip: address.zip,
+        country: "US",
+      });
+    } catch (err) {
+      console.error("[store] calculate", err);
+      const msg = err instanceof WhccError && err.status === 400 ? "Revisa la dirección de envío." : "No pudimos cotizar tus diseños. Inténtalo de nuevo.";
+      return NextResponse.json({ error: msg }, { status: 502 });
+    }
+    const byConfigured = new Map(quoted.items.map((q) => [q.configuredProductId, q]));
+    for (const d of pendingDesigns) {
+      const q = byConfigured.get(d.configuredProductId);
+      if (!q || !q.isValidForOrder || q.unitPriceCents <= 0) {
+        return NextResponse.json({ error: `Tu diseño de ${d.product.productName} necesita revisión. Ábrelo y termínalo.` }, { status: 409 });
+      }
+      lines.push({
+        productId: d.product.id,
+        name: d.product.productName,
+        sizeLabel: d.product.sizeLabel,
+        detail: d.product.kind === "card" ? "Tarjetas personalizadas" : "Diseño personalizado",
+        categoryRef: d.product.categoryRef,
+        quantity: d.quantity,
+        unitPriceCents: retailPriceCents(q.unitPriceCents, d.product.markupPercent),
+        unitCostCents: q.unitPriceCents,
+        selections: { __product_ref: d.product.productRef, __editor: true },
+        assetId: null,
+        editorItemId: d.item.editorItemId,
+        configuredProductId: d.configuredProductId,
+      });
+    }
+    designShippingCents = quoted.shippingCents ?? designItems.length * shippingCentsFor(1);
+  }
+
+  const photoGroups = new Set(lines.filter((l) => !l.editorItemId).map((l) => l.categoryRef)).size;
+  const groups = photoGroups + designItems.length;
+  const shippingCents = shippingCentsFor(photoGroups) + designShippingCents;
   const quote = quoteOrder(
-    lines.map((l) => ({ unitPriceCents: l.product.priceCents, unitCostCents: l.product.costCents, quantity: l.item.quantity })),
+    lines.map((l) => ({ unitPriceCents: l.unitPriceCents, unitCostCents: l.unitCostCents, quantity: l.quantity })),
     shippingCents,
   );
 
@@ -116,15 +225,17 @@ export async function POST(req: NextRequest) {
     lines.map((l) => ({
       order_id: order.id,
       creator_id: access.creator.id,
-      product_id: l.product.id,
-      asset_id: l.asset.id,
-      product_name: l.product.productName,
-      size_label: l.product.sizeLabel,
-      file_name: l.asset.file_name,
-      selections: { ...l.product.selections, __product_ref: l.product.productRef },
-      quantity: l.item.quantity,
-      unit_price_cents: l.product.priceCents,
-      unit_cost_cents: l.product.costCents,
+      product_id: l.productId,
+      asset_id: l.assetId,
+      editor_item_id: l.editorItemId,
+      lab_configured_product_id: l.configuredProductId,
+      product_name: l.name,
+      size_label: l.sizeLabel,
+      file_name: l.detail,
+      selections: l.selections,
+      quantity: l.quantity,
+      unit_price_cents: l.unitPriceCents,
+      unit_cost_cents: l.unitCostCents,
     })),
   );
   if (itemsError) throw itemsError;
@@ -156,13 +267,13 @@ export async function POST(req: NextRequest) {
       mode: "payment",
       ...(customer ? { customer } : { customer_email: buyer.email }),
       line_items: lines.map((l) => ({
-        quantity: l.item.quantity,
+        quantity: l.quantity,
         price_data: {
           currency: "usd",
-          unit_amount: l.product.priceCents,
+          unit_amount: l.unitPriceCents,
           product_data: {
-            name: `${l.product.productName} ${l.product.sizeLabel}`,
-            description: l.asset.file_name,
+            name: `${l.name} ${l.sizeLabel}`,
+            description: l.detail,
           },
           ...(taxEnabled ? { tax_behavior: "exclusive" as const } : {}),
         },

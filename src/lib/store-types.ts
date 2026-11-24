@@ -14,6 +14,11 @@ export interface StoreProduct {
   /** PPI que recomienda el laboratorio para este producto. */
   resolution: number | null;
   description: string | null;
+  kind: "print" | "canvas" | "book" | "card";
+  /** "api": se arma con una foto. "editor": se diseña en el editor de WHCC. */
+  completion: "api" | "editor";
+  minQuantity: number;
+  quantityStep: number;
 }
 
 export interface StoreConfig {
@@ -25,11 +30,23 @@ export interface StoreConfig {
   cartHref: string;
 }
 
+/**
+ * Línea del carrito: una foto impresa (assetId) o un diseño del editor de WHCC
+ * (editorItemId: photobook o tarjetas). El precio se recalcula en el servidor.
+ */
 export interface CartLine {
   productId: string;
-  assetId: string;
   quantity: number;
-  fileName: string;
+  assetId?: string;
+  fileName?: string;
+  editorItemId?: string;
+  previewUrl?: string | null;
+  /** Solo para mostrar (diseños: depende de las páginas). */
+  unitPriceCents?: number;
+}
+
+export function lineKey(l: Pick<CartLine, "productId" | "assetId" | "editorItemId">): string {
+  return l.editorItemId ? `e:${l.editorItemId}` : `p:${l.productId}:${l.assetId}`;
 }
 
 /** Formatos y tamaño máximo que acepta el laboratorio. */

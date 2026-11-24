@@ -127,8 +127,26 @@ export type PrintProductRow = {
   description: string | null;
   sort: number;
   active: boolean;
+  completion: "api" | "editor";
+  kind: "print" | "canvas" | "book" | "card";
+  min_quantity: number;
+  quantity_step: number;
   synced_at: string;
   created_at: string;
+}
+
+export type PrintEditorItemRow = {
+  id: string;
+  creator_id: string;
+  project_id: string;
+  product_id: string;
+  configured_product_id: string;
+  design_id: string | null;
+  return_token: string | null;
+  finished: boolean;
+  preview_url: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export type CreatorProductPriceRow = {
@@ -215,6 +233,7 @@ export type PrintOrderItemRow = {
   unit_price_cents: number;
   unit_cost_cents: number;
   lab_configured_product_id: string | null;
+  editor_item_id: string | null;
   created_at: string;
 }
 
@@ -345,7 +364,20 @@ export type Database = {
         Row: PrintProductRow;
         Insert: Optional<
           PrintProductRow,
-          "id" | "width_in" | "height_in" | "selections" | "resolution" | "description" | "sort" | "active" | "synced_at" | "created_at"
+          | "id"
+          | "width_in"
+          | "height_in"
+          | "selections"
+          | "resolution"
+          | "description"
+          | "sort"
+          | "active"
+          | "completion"
+          | "kind"
+          | "min_quantity"
+          | "quantity_step"
+          | "synced_at"
+          | "created_at"
         >;
         Update: Partial<PrintProductRow>;
         Relationships: [];
@@ -396,7 +428,7 @@ export type Database = {
       };
       print_order_items: {
         Row: PrintOrderItemRow;
-        Insert: Optional<PrintOrderItemRow, "id" | "product_id" | "asset_id" | "lab_configured_product_id" | "created_at">;
+        Insert: Optional<PrintOrderItemRow, "id" | "product_id" | "asset_id" | "lab_configured_product_id" | "editor_item_id" | "created_at">;
         Update: Partial<PrintOrderItemRow>;
         Relationships: [
           {
@@ -407,6 +439,12 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      print_editor_items: {
+        Row: PrintEditorItemRow;
+        Insert: Optional<PrintEditorItemRow, "id" | "design_id" | "return_token" | "finished" | "preview_url" | "created_at" | "updated_at">;
+        Update: Partial<PrintEditorItemRow>;
+        Relationships: [];
       };
       lab_events: {
         Row: LabEventRow;

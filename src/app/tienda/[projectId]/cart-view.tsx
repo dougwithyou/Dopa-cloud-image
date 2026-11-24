@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useCart } from "@/components/store/cart";
 import { formatUsd } from "@/lib/print-pricing";
-import { US_STATES, type StoreProduct } from "@/lib/store-types";
+import { normalizeQuantity } from "@/lib/print-offerings";
+import { US_STATES, lineKey, type CartLine, type StoreProduct } from "@/lib/store-types";
 
 type Photo = { id: string; fileName: string; url: string };
 
@@ -29,14 +30,53 @@ export function CartView({
   const cart = useCart(projectId);
   const productById = new Map(products.map((p) => [p.id, p]));
   const photoById = new Map(photos.map((p) => [p.id, p]));
-  const lines = cart.lines
-    .map((l) => ({ line: l, product: productById.get(l.productId), photo: photoById.get(l.assetId) }))
-    .filter((x): x is { line: typeof x.line; product: StoreProduct; photo: Photo } => Boolean(x.product && x.photo));
+  type Row = { key: string; line: CartLine; product: StoreProduct; photo: Photo | null; unitCents: number };
+  const lines: Row[] = [];
+  for (const l of cart.lines) {
+    const product = productById.get(l.productId);
+    if (!product) continue;
+    if (l.editorItemId) {
+      if (product.completion !== "editor") continue;
+      lines.push({ key: lineKey(l), line: l, product, photo: null, unitCents: l.unitPriceCents ?? product.priceCents });
+    } else {
+      const photo = l.assetId ? photoById.get(l.assetId) : undefined;
+      if (!photo || product.completion !== "api") continue;
+      lines.push({ key: lineKey(l), line: l, product, photo, unitCents: product.priceCents });
+    }
+  }
   const missing = cart.lines.length - lines.length;
 
-  const subtotal = lines.reduce((s, x) => s + x.product.priceCents * x.line.quantity, 0);
-  const groups = new Set(lines.map((x) => x.product.categoryRef)).size;
+  const subtotal = lines.reduce((s, x) => s + x.unitCents * x.line.quantity, 0);
+  // Estimado: impresiones/canvas por categoría; cada photobook o juego de tarjetas va en su propio paquete.
+  const groups = new Set(lines.filter((x) => !x.line.editorItemId).map((x) => x.product.categoryRef)).size + lines.filter((x) => x.line.editorItemId).length;
   const shipping = groups * shippingPerGroupCents;
+  const hasDesigns = lines.some((x) => x.line.editorItemId);
+  const [editing, setEditing] = useState<string | null>(null);
+
+  async function editDesign(editorItemId: string) {
+    setEditing(editorItemId);
+    const res = await fetch("/api/store/editor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId, editorItemId }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+    if (data.url) window.location.href = data.url;
+    else {
+      setEditing(null);
+      setError(data.error ?? "No se pudo abrir el editor.");
+    }
+  }
+
+  function step(x: Row, dir: 1 | -1) {
+    const { minQuantity, quantityStep, kind } = x.product;
+    if (kind === "card") {
+      const next = x.line.quantity + dir * quantityStep;
+      cart.setQuantity(x.key, next < minQuantity ? (dir < 0 ? 0 : minQuantity) : normalizeQuantity(next, minQuantity, quantityStep));
+    } else {
+      cart.setQuantity(x.key, Math.min(x.line.editorItemId ? 10 : 100, x.line.quantity + dir));
+    }
+  }
 
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +90,11 @@ export function CartView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId,
-          items: lines.map((x) => ({ productId: x.product.id, assetId: x.photo.id, quantity: x.line.quantity })),
+          items: lines.map((x) =>
+            x.line.editorItemId
+              ? { productId: x.product.id, editorItemId: x.line.editorItemId, quantity: x.line.quantity }
+              : { productId: x.product.id, assetId: x.photo!.id, quantity: x.line.quantity },
+          ),
           buyer: { name: String(form.get("name") ?? ""), email: String(form.get("email") ?? "") },
           address: {
             addr1: String(form.get("addr1") ?? ""),
@@ -74,7 +118,9 @@ export function CartView({
     return (
       <div className="mx-auto max-w-md px-4 py-20 text-center">
         <h1 className="text-2xl font-semibold">Tu carrito está vacío</h1>
-        <p className="mt-2 text-sm text-neutral-500">Abre una foto de la galería y elige “Comprar impresión”.</p>
+        <p className="mt-2 text-sm text-neutral-500">
+          Abre una foto y elige “Comprar impresión”, o entra a “Tienda” en la galería para photobooks y tarjetas.
+        </p>
         <a href={galleryHref} className="mt-6 inline-block rounded-full bg-neutral-900 px-6 py-3 text-sm font-semibold text-white">
           Ir a la galería
         </a>
@@ -93,31 +139,54 @@ export function CartView({
           </p>
         ) : null}
         <ul className="mt-5 divide-y divide-neutral-200 rounded-2xl border border-neutral-200 bg-white">
-          {lines.map(({ line, product, photo }) => (
-            <li key={`${line.productId}-${line.assetId}`} className="flex gap-4 p-4">
-              {/* eslint-disable-next-line @next/next/no-img-element -- URL firmada de R2 */}
-              <img src={photo.url} alt="" loading="lazy" className="h-20 w-20 shrink-0 rounded-lg bg-neutral-100 object-cover" />
+          {lines.map((x) => (
+            <li key={x.key} className="flex gap-4 p-4">
+              {x.photo?.url || x.line.previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- URL firmada de R2 o vista previa de WHCC
+                <img
+                  src={(x.photo?.url ?? x.line.previewUrl) as string}
+                  alt=""
+                  loading="lazy"
+                  className={`h-20 w-20 shrink-0 rounded-lg bg-neutral-100 ${x.photo ? "object-cover" : "object-contain"}`}
+                />
+              ) : (
+                <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-[10px] text-neutral-400 uppercase">
+                  {x.product.kind === "card" ? "Tarjeta" : "Libro"}
+                </span>
+              )}
               <div className="min-w-0 flex-1">
                 <p className="font-medium">
-                  {product.productName} · {product.sizeLabel}
+                  {x.product.productName} · {x.product.sizeLabel}
                 </p>
-                <p className="truncate text-xs text-neutral-500">{photo.fileName}</p>
-                <div className="mt-2 flex items-center gap-3">
+                <p className="truncate text-xs text-neutral-500">
+                  {x.photo ? x.photo.fileName : x.product.kind === "card" ? `${formatUsd(x.unitCents)} c/u · mínimo ${x.product.minQuantity}` : "Tu diseño"}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
                   <div className="flex items-center rounded-full border border-neutral-200 text-sm">
-                    <button type="button" className="h-8 w-8" onClick={() => cart.setQuantity(line.productId, line.assetId, line.quantity - 1)} aria-label="Menos">
+                    <button type="button" className="h-8 w-8" onClick={() => step(x, -1)} aria-label="Menos">
                       −
                     </button>
-                    <span className="w-6 text-center tabular-nums">{line.quantity}</span>
-                    <button type="button" className="h-8 w-8" onClick={() => cart.setQuantity(line.productId, line.assetId, line.quantity + 1)} aria-label="Más">
+                    <span className="min-w-6 px-1 text-center tabular-nums">{x.line.quantity}</span>
+                    <button type="button" className="h-8 w-8" onClick={() => step(x, 1)} aria-label="Más">
                       +
                     </button>
                   </div>
-                  <button type="button" className="text-xs text-neutral-500 underline" onClick={() => cart.setQuantity(line.productId, line.assetId, 0)}>
+                  {x.line.editorItemId ? (
+                    <button
+                      type="button"
+                      disabled={editing !== null}
+                      className="text-xs font-medium underline disabled:opacity-50"
+                      onClick={() => editDesign(x.line.editorItemId!)}
+                    >
+                      {editing === x.line.editorItemId ? "Abriendo…" : "Editar diseño"}
+                    </button>
+                  ) : null}
+                  <button type="button" className="text-xs text-neutral-500 underline" onClick={() => cart.remove(x.key)}>
                     Quitar
                   </button>
                 </div>
               </div>
-              <p className="shrink-0 font-medium tabular-nums">{formatUsd(product.priceCents * line.quantity)}</p>
+              <p className="shrink-0 font-medium tabular-nums">{formatUsd(x.unitCents * x.line.quantity)}</p>
             </li>
           ))}
         </ul>
@@ -127,7 +196,10 @@ export function CartView({
             <dd className="tabular-nums">{formatUsd(subtotal)}</dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-neutral-500">Envío económico{groups > 1 ? ` (${groups} paquetes)` : ""}</dt>
+            <dt className="text-neutral-500">
+              Envío económico{groups > 1 ? ` (${groups} paquetes)` : ""}
+              {hasDesigns ? " · estimado" : ""}
+            </dt>
             <dd className="tabular-nums">{formatUsd(shipping)}</dd>
           </div>
           {taxAtCheckout ? (
@@ -143,6 +215,9 @@ export function CartView({
         </dl>
         {groups > 1 ? (
           <p className="mt-2 text-xs text-neutral-500">Cada tipo de producto se produce y se envía en su propio paquete.</p>
+        ) : null}
+        {hasDesigns ? (
+          <p className="mt-1 text-xs text-neutral-500">El precio final de photobooks y tarjetas se confirma al pagar, según tu diseño.</p>
         ) : null}
       </section>
 
