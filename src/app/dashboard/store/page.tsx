@@ -11,6 +11,8 @@ import { ArrowRightIcon, CheckIcon, ImageIcon } from "@/components/icons";
 import { saveProductSettings, updateStoreMarkup } from "./actions";
 
 export const metadata = { title: "Tienda" };
+// La primera carga del catálogo (en segundo plano) tarda ~30 s.
+export const maxDuration = 120;
 
 export default async function StorePage({ searchParams }: { searchParams: Promise<{ connect?: string }> }) {
   const { supabase, creator } = await requireCreator();
