@@ -146,8 +146,24 @@ function BooksTab({ books, busy, onDesign }: { books: StoreProduct[]; busy: bool
   return (
     <div>
       <p className="text-sm text-neutral-600">
-        Diseña tu libro en el editor del laboratorio. Las fotos de esta galería ya estarán cargadas: arrástralas o usa el relleno automático.
+        Diseña tu libro en el editor del laboratorio (en inglés). <strong>Las fotos de esta galería ya están cargadas</strong>, no
+        tienes que subirlas otra vez.
       </p>
+      <ol className="mt-3 space-y-1.5 rounded-2xl bg-neutral-50 p-4 text-sm text-neutral-700">
+        <li>
+          <strong>1.</strong> En el editor, pasa de la portada (<em>Cover</em>) a la página <strong>2</strong>.
+        </li>
+        <li>
+          <strong>2.</strong> Toca <strong>Autofill Spreads</strong> para llenar el libro con tus fotos, o <strong>Add Images</strong> para
+          elegirlas una a una: ahí aparecen las fotos de la galería.
+        </li>
+        <li>
+          <strong>3.</strong> ¿Quieres una foto en la portada? En <em>Cover</em>, elige <strong>Cover Type → Photo</strong>.
+        </li>
+        <li>
+          <strong>4.</strong> Al terminar, toca <strong>Review</strong> y confirma: volverás aquí con tu libro en el carrito.
+        </li>
+      </ol>
       <div className="mt-4 grid gap-4 md:grid-cols-3">
         {byProduct.map((list) => {
           const ref = list[0].productRef;
@@ -250,7 +266,8 @@ function CardsTab({
     <div>
       <p className="text-sm text-neutral-600">
         Elige un diseño y personalízalo con tus fotos y tu texto. {product.sizeLabel}, con sobre. Mínimo {product.minQuantity} tarjetas, desde{" "}
-        {formatUsd(product.priceCents)} c/u.
+        {formatUsd(product.priceCents)} c/u. En el editor, las fotos de esta galería ya están cargadas: toca el espacio de la foto o{" "}
+        <strong>Add Images</strong> para elegirlas, y <strong>Review</strong> al terminar.
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
         {CARD_OCCASIONS.map((o) => (
