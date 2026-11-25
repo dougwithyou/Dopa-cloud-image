@@ -357,7 +357,8 @@ export async function editorLink(configuredProductId: string, completeUrl: strin
           complete: { text: "Listo, volver al carrito", url: completeUrl },
           cancel: { text: "Volver a la galería", url: cancelUrl },
         },
-        settings: { hidePricing: true, addToProject: false, productSwitcher: false },
+        // Sin opción de subir fotos: el cliente usa solo las de la galería.
+        settings: { hidePricing: true, disableUploads: true, addToProject: false, productSwitcher: false },
       }),
     },
   );

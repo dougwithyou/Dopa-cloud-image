@@ -458,7 +458,7 @@ export function PhotoGalleryTemplate({
       </footer>
 
       {open !== null ? <Lightbox items={ordered} index={open} onClose={() => setOpen(null)} onNavigate={setOpen} hrefFor={hrefFor} store={store} /> : null}
-      {shopping && store ? <StoreSheet store={store} onClose={() => setShopping(false)} /> : null}
+      {shopping && store ? <StoreSheet store={store} media={ordered} onClose={() => setShopping(false)} /> : null}
     </div>
   );
 }

@@ -1,16 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { FeedMedia } from "@/components/feed-post";
 import { formatUsd } from "@/lib/print-pricing";
 import { CARD_OCCASIONS, KIND_LABEL } from "@/lib/print-offerings";
-import type { StoreConfig, StoreProduct } from "@/lib/store-types";
+import { isLowResolution, isPrintable, type StoreConfig, type StoreProduct } from "@/lib/store-types";
 import { useCart } from "./cart";
+import { GalleryPhotoPicker, type PhotoPixels } from "./gallery-photo-picker";
+
+/** Máximo de fotos que se cargan en el editor de WHCC. */
+const MAX_EDITOR_PHOTOS = 100;
 
 type Tab = "prints" | "book" | "card";
 type Design = { id: string; name: string; subtitle: string; previewUrl: string | null };
 
 /** Abre el editor de WHCC (photobook o tarjeta) y lleva al cliente allí. */
-async function openEditor(body: Record<string, string>): Promise<string | null> {
+async function openEditor(body: Record<string, unknown>): Promise<string | null> {
   const res = await fetch("/api/store/editor", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -29,11 +34,16 @@ function fromPrice(list: StoreProduct[]) {
 }
 
 /**
- * Tienda de la galería: impresiones y canvas (desde cada foto), photobooks y
- * tarjetas (se diseñan en el editor de WHCC con las fotos de la galería).
+ * Tienda de la galería. En todos los productos se eligen fotos de la galería
+ * (las que están en línea, no las del teléfono): impresiones y canvas aquí
+ * mismo; photobooks y tarjetas antes de abrir el editor de WHCC, que solo
+ * recibe esas fotos.
  */
-export function StoreSheet({ store, onClose }: { store: StoreConfig; onClose: () => void }) {
+export function StoreSheet({ store, media, onClose }: { store: StoreConfig; media: FeedMedia[]; onClose: () => void }) {
   const cart = useCart(store.projectId);
+  const photos = useMemo(() => media.filter((m) => isPrintable(m)), [media]);
+  // Paso "elige tus fotos" antes de abrir el editor (libro o tarjeta).
+  const [pick, setPick] = useState<{ productId: string; designId?: string; title: string } | null>(null);
   const photoProducts = store.products.filter((p) => p.completion === "api");
   const books = store.products.filter((p) => p.kind === "book");
   const cards = store.products.filter((p) => p.kind === "card");
@@ -59,7 +69,7 @@ export function StoreSheet({ store, onClose }: { store: StoreConfig; onClose: ()
     };
   }, [onClose]);
 
-  const start = async (body: Record<string, string>) => {
+  const start = async (body: Record<string, unknown>) => {
     setBusy(true);
     setError(null);
     const err = await openEditor({ projectId: store.projectId, ...body });
@@ -86,57 +96,230 @@ export function StoreSheet({ store, onClose }: { store: StoreConfig; onClose: ()
             </button>
           </div>
         </header>
-        <nav className="flex shrink-0 gap-2 overflow-x-auto border-b border-neutral-100 px-5 py-3">
-          {tabs.map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              className={`shrink-0 rounded-full px-4 py-1.5 text-sm transition ${id === tab ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-600"}`}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
+        {pick ? null : (
+          <nav className="flex shrink-0 gap-2 overflow-x-auto border-b border-neutral-100 px-5 py-3">
+            {tabs.map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTab(id)}
+                className={`shrink-0 rounded-full px-4 py-1.5 text-sm transition ${id === tab ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-600"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+        )}
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {error ? <p className="mb-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-700">{error}</p> : null}
-          {tab === "prints" ? <PrintsTab products={photoProducts} /> : null}
-          {tab === "book" ? <BooksTab books={books} busy={busy} onDesign={(productId) => start({ productId })} /> : null}
-          {tab === "card" ? (
-            <CardsTab cards={cards} projectId={store.projectId} busy={busy} onDesign={(productId, designId) => start({ productId, designId })} />
-          ) : null}
+          {pick ? (
+            <PhotoStep
+              title={pick.title}
+              photos={photos}
+              busy={busy}
+              onBack={() => setPick(null)}
+              onContinue={(assetIds) => start({ productId: pick.productId, ...(pick.designId ? { designId: pick.designId } : {}), assetIds })}
+            />
+          ) : (
+            <>
+              {tab === "prints" ? <PrintsTab products={photoProducts} photos={photos} projectId={store.projectId} cartHref={store.cartHref} /> : null}
+              {tab === "book" ? (
+                <BooksTab
+                  books={books}
+                  busy={busy}
+                  onDesign={(product) => setPick({ productId: product.id, title: `${product.productName} · ${product.sizeLabel}` })}
+                />
+              ) : null}
+              {tab === "card" ? (
+                <CardsTab
+                  cards={cards}
+                  projectId={store.projectId}
+                  busy={busy}
+                  onDesign={(product, designId, name) => setPick({ productId: product.id, designId, title: `${product.productName} · ${name}` })}
+                />
+              ) : null}
+            </>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function PrintsTab({ products }: { products: StoreProduct[] }) {
-  const byProduct = new Map<string, StoreProduct[]>();
-  for (const p of products) byProduct.set(p.productRef, [...(byProduct.get(p.productRef) ?? []), p]);
+function PrintsTab({
+  products,
+  photos,
+  projectId,
+  cartHref,
+}: {
+  products: StoreProduct[];
+  photos: FeedMedia[];
+  projectId: string;
+  cartHref: string;
+}) {
+  const cart = useCart(projectId);
+  const groups = useMemo(() => {
+    const m = new Map<string, StoreProduct[]>();
+    for (const p of products) m.set(p.productRef, [...(m.get(p.productRef) ?? []), p]);
+    return [...m.values()];
+  }, [products]);
+  const [ref, setRef] = useState(groups[0]?.[0].productRef ?? "");
+  const sizes = groups.find((g) => g[0].productRef === ref) ?? groups[0] ?? [];
+  const [sizeId, setSizeId] = useState<string | null>(null);
+  const size = sizes.find((s) => s.id === sizeId) ?? sizes[0];
+  const [selected, setSelected] = useState<string[]>([]);
+  const [quantity, setQuantity] = useState(1);
+  const [pixels, setPixels] = useState<PhotoPixels>({});
+  const [added, setAdded] = useState(0);
+
+  const onPixels = useCallback((id: string, px: { w: number; h: number }) => setPixels((p) => (p[id] ? p : { ...p, [id]: px })), []);
+  const lowRes = useMemo(
+    () => new Set(size ? selected.filter((id) => isLowResolution(pixels[id], size)) : []),
+    [selected, pixels, size],
+  );
+  if (!size) return null;
+
+  const addAll = () => {
+    let n = 0;
+    for (const id of selected) {
+      const photo = photos.find((p) => p.id === id);
+      if (photo && cart.add({ productId: size.id, assetId: id, quantity, fileName: photo.file_name })) n++;
+    }
+    setAdded(n);
+    setSelected([]);
+  };
+
   return (
-    <div>
-      <p className="text-sm text-neutral-600">
-        Abre cualquier foto de la galería y pulsa <strong>Comprar impresión</strong> para elegir el tamaño.
-      </p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        {[...byProduct.values()].map((list) => (
-          <div key={list[0].productRef} className="rounded-2xl border border-neutral-200 p-4">
-            <p className="font-medium">{list[0].productName}</p>
-            {list[0].description ? <p className="text-xs text-neutral-500">{list[0].description}</p> : null}
-            <p className="mt-2 text-sm">
-              {list.map((p) => p.sizeLabel).join(" · ")}
+    <div className="space-y-5">
+      {groups.length > 1 ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {groups.map((list) => (
+            <button
+              key={list[0].productRef}
+              type="button"
+              onClick={() => {
+                setRef(list[0].productRef);
+                setSizeId(null);
+                setAdded(0);
+              }}
+              className={`rounded-xl border px-4 py-3 text-left text-sm transition ${list[0].productRef === ref ? "border-neutral-900 ring-1 ring-neutral-900" : "border-neutral-200"}`}
+            >
+              <span className="block font-medium">{list[0].productName}</span>
+              <span className="text-xs text-neutral-500">
+                {list[0].description ? `${list[0].description} ` : ""}Desde {formatUsd(fromPrice(list))}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <div>
+        <p className="mb-2 text-xs font-semibold tracking-wide text-neutral-500 uppercase">1. Tamaño (pulgadas)</p>
+        <div className="flex flex-wrap gap-2">
+          {sizes.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setSizeId(s.id)}
+              className={`rounded-xl border px-3 py-2 text-center text-sm transition ${s.id === size.id ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-200"}`}
+            >
+              <span className="block font-medium">{s.sizeLabel}</span>
+              <span className={`text-xs ${s.id === size.id ? "text-white/70" : "text-neutral-500"}`}>{formatUsd(s.priceCents)}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-xs font-semibold tracking-wide text-neutral-500 uppercase">2. Elige las fotos de la galería</p>
+        <GalleryPhotoPicker photos={photos} selected={selected} onChange={(ids) => { setSelected(ids); setAdded(0); }} warnIds={lowRes} onPixels={onPixels} />
+      </div>
+
+      <div className="sticky bottom-0 -mx-5 -mb-5 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 bg-white px-5 py-4">
+        {added > 0 ? (
+          <>
+            <p className="text-sm">
+              {added === 1 ? "1 impresión agregada" : `${added} impresiones agregadas`} al carrito.
             </p>
-            <p className="mt-1 text-sm text-neutral-500">Desde {formatUsd(fromPrice(list))}</p>
-          </div>
-        ))}
+            <a href={cartHref} className="rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white">
+              Ver carrito
+            </a>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-neutral-500">Copias de cada una</span>
+              <div className="flex items-center rounded-full border border-neutral-200 text-sm">
+                <button type="button" className="h-9 w-9" onClick={() => setQuantity((q) => Math.max(1, q - 1))} aria-label="Menos">
+                  −
+                </button>
+                <span className="w-6 text-center tabular-nums">{quantity}</span>
+                <button type="button" className="h-9 w-9" onClick={() => setQuantity((q) => Math.min(100, q + 1))} aria-label="Más">
+                  +
+                </button>
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={selected.length === 0}
+              onClick={addAll}
+              className="rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+            >
+              {selected.length === 0
+                ? "Elige al menos una foto"
+                : `Agregar ${selected.length} · ${formatUsd(size.priceCents * quantity * selected.length)}`}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-function BooksTab({ books, busy, onDesign }: { books: StoreProduct[]; busy: boolean; onDesign: (productId: string) => void }) {
+/** Paso previo al editor: qué fotos de la galería se cargan en él. */
+function PhotoStep({
+  title,
+  photos,
+  busy,
+  onBack,
+  onContinue,
+}: {
+  title: string;
+  photos: FeedMedia[];
+  busy: boolean;
+  onBack: () => void;
+  onContinue: (assetIds: string[]) => void;
+}) {
+  const [selected, setSelected] = useState<string[]>(() => photos.slice(0, MAX_EDITOR_PHOTOS).map((p) => p.id));
+  return (
+    <div className="space-y-4">
+      <button type="button" onClick={onBack} className="text-sm text-neutral-500 hover:text-neutral-900">
+        ← Volver
+      </button>
+      <div>
+        <p className="font-semibold">{title}</p>
+        <p className="mt-1 text-sm text-neutral-600">
+          Elige las fotos de la galería que quieres usar. Solo estas aparecerán en el editor del laboratorio, listas para colocar o para el
+          relleno automático (<em>Autofill</em>).
+        </p>
+      </div>
+      <GalleryPhotoPicker photos={photos} selected={selected} onChange={setSelected} max={MAX_EDITOR_PHOTOS} />
+      <div className="sticky bottom-0 -mx-5 -mb-5 border-t border-neutral-100 bg-white px-5 py-4">
+        <button
+          type="button"
+          disabled={busy || selected.length === 0}
+          onClick={() => onContinue(selected)}
+          className="w-full rounded-full bg-neutral-900 px-5 py-3 text-sm font-semibold text-white disabled:opacity-40"
+        >
+          {busy ? "Abriendo el editor…" : selected.length === 0 ? "Elige al menos una foto" : `Abrir el editor con ${selected.length} ${selected.length === 1 ? "foto" : "fotos"}`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BooksTab({ books, busy, onDesign }: { books: StoreProduct[]; busy: boolean; onDesign: (product: StoreProduct) => void }) {
   const byProduct = useMemo(() => {
     const m = new Map<string, StoreProduct[]>();
     for (const p of books) m.set(p.productRef, [...(m.get(p.productRef) ?? []), p]);
@@ -146,8 +329,8 @@ function BooksTab({ books, busy, onDesign }: { books: StoreProduct[]; busy: bool
   return (
     <div>
       <p className="text-sm text-neutral-600">
-        Diseña tu libro en el editor del laboratorio (en inglés). <strong>Las fotos de esta galería ya están cargadas</strong>, no
-        tienes que subirlas otra vez.
+        Elige el libro y después las fotos de la galería que quieres usar. Lo diseñas en el editor del laboratorio (en inglés) solo con
+        esas fotos.
       </p>
       <ol className="mt-3 space-y-1.5 rounded-2xl bg-neutral-50 p-4 text-sm text-neutral-700">
         <li>
@@ -155,7 +338,7 @@ function BooksTab({ books, busy, onDesign }: { books: StoreProduct[]; busy: bool
         </li>
         <li>
           <strong>2.</strong> Toca <strong>Autofill Spreads</strong> para llenar el libro con tus fotos, o <strong>Add Images</strong> para
-          elegirlas una a una: ahí aparecen las fotos de la galería.
+          colocarlas una a una.
         </li>
         <li>
           <strong>3.</strong> ¿Quieres una foto en la portada? En <em>Cover</em>, elige <strong>Cover Type → Photo</strong>.
@@ -191,10 +374,10 @@ function BooksTab({ books, busy, onDesign }: { books: StoreProduct[]; busy: bool
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => onDesign(current.id)}
+                onClick={() => onDesign(current)}
                 className="mt-auto rounded-full bg-neutral-900 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60 [margin-top:1rem]"
               >
-                {busy ? "Abriendo el editor…" : "Diseñar mi libro"}
+                Elegir fotos y diseñar
               </button>
             </div>
           );
@@ -222,7 +405,7 @@ function CardsTab({
   cards: StoreProduct[];
   projectId: string;
   busy: boolean;
-  onDesign: (productId: string, designId: string) => void;
+  onDesign: (product: StoreProduct, designId: string, designName: string) => void;
 }) {
   const [occasion, setOccasion] = useState(CARD_OCCASIONS[0].tag);
   const [format, setFormat] = useState<"flat" | "folded">("flat");
@@ -266,8 +449,8 @@ function CardsTab({
     <div>
       <p className="text-sm text-neutral-600">
         Elige un diseño y personalízalo con tus fotos y tu texto. {product.sizeLabel}, con sobre. Mínimo {product.minQuantity} tarjetas, desde{" "}
-        {formatUsd(product.priceCents)} c/u. En el editor, las fotos de esta galería ya están cargadas: toca el espacio de la foto o{" "}
-        <strong>Add Images</strong> para elegirlas, y <strong>Review</strong> al terminar.
+        {formatUsd(product.priceCents)} c/u. Después eliges las fotos de la galería; en el editor toca el espacio de la foto o{" "}
+        <strong>Add Images</strong> para colocarlas, y <strong>Review</strong> al terminar.
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
         {CARD_OCCASIONS.map((o) => (
@@ -288,7 +471,7 @@ function CardsTab({
             key={d.id}
             type="button"
             disabled={busy}
-            onClick={() => onDesign(product.id, d.id)}
+            onClick={() => onDesign(product, d.id, d.name)}
             className="group text-left disabled:opacity-60"
           >
             <span className="block overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50">

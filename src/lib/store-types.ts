@@ -55,6 +55,18 @@ export const MAX_PRINT_FILE_BYTES = 40 * 1024 * 1024;
 export const MAX_CART_LINES = 50;
 export const MAX_LINE_QUANTITY = 100;
 
+/** PPI por debajo del cual avisamos que la impresión puede verse borrosa. */
+export const MIN_PRINT_PPI = 150;
+
+/** ¿La foto tiene pocos píxeles para este tamaño (en cualquier orientación)? */
+export function isLowResolution(pixels: { w: number; h: number } | null | undefined, size: Pick<StoreProduct, "widthIn" | "heightIn">): boolean {
+  if (!pixels || !size.widthIn || !size.heightIn) return false;
+  return (
+    Math.max(pixels.w, pixels.h) / Math.max(size.widthIn, size.heightIn) < MIN_PRINT_PPI ||
+    Math.min(pixels.w, pixels.h) / Math.min(size.widthIn, size.heightIn) < MIN_PRINT_PPI
+  );
+}
+
 export function isPrintable(file: { kind: string; file_name: string; size_bytes: number }): boolean {
   const ext = file.file_name.toLowerCase().split(".").pop() ?? "";
   return file.kind === "photo" && PRINTABLE_EXTENSIONS.includes(ext) && file.size_bytes <= MAX_PRINT_FILE_BYTES;

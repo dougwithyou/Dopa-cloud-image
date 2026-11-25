@@ -16,7 +16,13 @@ const MAX_EDITOR_PHOTOS = 100;
 const LAB_IMAGE_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 const Body = z.union([
-  z.object({ projectId: z.uuid(), productId: z.uuid(), designId: z.string().max(64).optional() }),
+  z.object({
+    projectId: z.uuid(),
+    productId: z.uuid(),
+    designId: z.string().max(64).optional(),
+    /** Fotos de la galería elegidas por el cliente (si no, todas). */
+    assetIds: z.array(z.uuid()).min(1).max(MAX_EDITOR_PHOTOS).optional(),
+  }),
   z.object({ projectId: z.uuid(), editorItemId: z.uuid() }),
 ]);
 
@@ -56,15 +62,22 @@ export async function POST(req: NextRequest) {
     if (!product) return NextResponse.json({ error: "Producto no disponible." }, { status: 404 });
     if (product.kind === "card" && !body.designId) return NextResponse.json({ error: "Elige un diseño." }, { status: 400 });
 
-    const { data: assets } = await admin
+    let query = admin
       .from("assets")
-      .select("kind, file_name, size_bytes, r2_key")
+      .select("id, kind, file_name, size_bytes, r2_key")
       .eq("project_id", body.projectId)
       .eq("kind", "photo")
-      .eq("upload_status", "complete")
-      .order("created_at")
-      .limit(400);
-    const photos = (assets ?? []).filter((a) => isPrintable({ ...a, size_bytes: Number(a.size_bytes) })).slice(0, MAX_EDITOR_PHOTOS);
+      .eq("upload_status", "complete");
+    if (body.assetIds) query = query.in("id", body.assetIds);
+    const { data: assets } = await query.order("created_at").limit(400);
+    let photos = (assets ?? []).filter((a) => isPrintable({ ...a, size_bytes: Number(a.size_bytes) }));
+    // Respeta el orden en que el cliente eligió las fotos.
+    if (body.assetIds) {
+      const order = new Map(body.assetIds.map((id, i) => [id, i]));
+      photos = photos.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+    }
+    photos = photos.slice(0, MAX_EDITOR_PHOTOS);
+    if (photos.length === 0) return NextResponse.json({ error: "Elige al menos una foto de la galería." }, { status: 400 });
     const imageUrls = await Promise.all(photos.map((a) => signDownloadUrl(a.r2_key, { expiresIn: LAB_IMAGE_TTL_SECONDS })));
 
     const selections: Record<string, string | number> =

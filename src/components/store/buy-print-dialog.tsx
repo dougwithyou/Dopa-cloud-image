@@ -3,11 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FeedMedia } from "@/components/feed-post";
 import { formatUsd } from "@/lib/print-pricing";
-import type { StoreConfig, StoreProduct } from "@/lib/store-types";
+import { isLowResolution, type StoreConfig, type StoreProduct } from "@/lib/store-types";
 import { useCart } from "./cart";
 
-/** PPI por debajo del cual avisamos que la impresión puede verse borrosa. */
-const MIN_PPI = 150;
 
 /** Precio "desde" de un grupo de productos. */
 function fromPrice(list: StoreProduct[]) {
@@ -62,11 +60,7 @@ export function BuyPrintDialog({ media, store, onClose }: { media: FeedMedia; st
   const w = size?.widthIn ?? 4;
   const h = size?.heightIn ?? 5;
   const ratio = landscape ? Math.max(w, h) / Math.min(w, h) : Math.min(w, h) / Math.max(w, h);
-  const lowRes =
-    natural && size?.widthIn && size?.heightIn
-      ? Math.max(natural.w, natural.h) / Math.max(size.widthIn, size.heightIn) < MIN_PPI ||
-        Math.min(natural.w, natural.h) / Math.min(size.widthIn, size.heightIn) < MIN_PPI
-      : false;
+  const lowRes = size ? isLowResolution(natural, size) : false;
 
   if (!size) return null;
 
