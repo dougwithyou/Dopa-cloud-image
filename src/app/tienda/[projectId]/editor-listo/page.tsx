@@ -5,9 +5,13 @@ import { retailPriceCents } from "@/lib/print-pricing";
 import { getStoreAccess, loadStoreProducts } from "@/lib/store";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AddDesignToCart, KeepEditingButton } from "./add-design";
+import { getI18n } from "@/i18n/server";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Tu diseño", robots: { index: false, follow: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t.store.designMeta, robots: { index: false, follow: false } };
+}
 
 /**
  * Regreso desde el editor de WHCC. Se acepta una sola vez por enlace (token) y
@@ -23,6 +27,7 @@ export default async function EditorReturnPage({
   const { projectId } = await params;
   const { item, t } = await searchParams;
   const access = await getStoreAccess(projectId);
+  const s = (await getI18n()).t.store;
   const admin = createAdminClient();
   const row =
     access && item
@@ -41,8 +46,8 @@ export default async function EditorReturnPage({
   if (!access || !row || !accepted) {
     return (
       <Shell>
-        <h1 className="text-2xl font-semibold">Este enlace ya no es válido</h1>
-        <p className="mt-2 text-sm text-neutral-500">Vuelve a la galería y abre tu diseño desde el carrito.</p>
+        <h1 className="text-2xl font-semibold">{s.linkInvalid}</h1>
+        <p className="mt-2 text-sm text-neutral-500">{s.linkInvalidText}</p>
       </Shell>
     );
   }
@@ -57,9 +62,9 @@ export default async function EditorReturnPage({
   if (!product || !result) {
     return (
       <Shell>
-        <h1 className="text-2xl font-semibold">No pudimos revisar tu diseño</h1>
-        <p className="mt-2 text-sm text-neutral-500">Inténtalo de nuevo en unos segundos.</p>
-        <KeepEditingButton projectId={projectId} editorItemId={row.id} label="Volver al editor" />
+        <h1 className="text-2xl font-semibold">{s.checkFailed}</h1>
+        <p className="mt-2 text-sm text-neutral-500">{s.checkFailedText}</p>
+        <KeepEditingButton projectId={projectId} editorItemId={row.id} label={s.backToEditor} />
       </Shell>
     );
   }
@@ -67,15 +72,15 @@ export default async function EditorReturnPage({
   if (!result.isValidForOrder) {
     return (
       <Shell>
-        <h1 className="text-2xl font-semibold">Tu diseño aún no está terminado</h1>
+        <h1 className="text-2xl font-semibold">{s.notFinished}</h1>
         <ul className="mt-3 space-y-1 text-sm text-neutral-600">
-          {(result.problems.length > 0 ? result.problems : ["Falta completar el diseño."]).map((p) => (
+          {(result.problems.length > 0 ? result.problems : [s.notFinishedDefault]).map((p) => (
             <li key={p}>· {p}</li>
           ))}
         </ul>
-        <KeepEditingButton projectId={projectId} editorItemId={row.id} label="Seguir diseñando" />
+        <KeepEditingButton projectId={projectId} editorItemId={row.id} label={s.keepDesigning} />
         <Link href={access.galleryHref} className="mt-3 block text-sm text-neutral-500 underline">
-          Volver a la galería
+          {s.backToGalleryPlain}
         </Link>
       </Shell>
     );

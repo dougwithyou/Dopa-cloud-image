@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { dashFont } from "@/lib/fonts";
 import { Logo } from "@/components/logo";
+import { LanguageSwitch } from "@/components/language-switch";
 import { SquiggleLine } from "@/components/landing/visuals";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -11,6 +12,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <Logo />
       </Link>
       <div className="card relative w-full max-w-sm p-6 sm:p-8">{children}</div>
+      <LanguageSwitch className="relative mt-6 text-neutral-600" />
     </main>
   );
 }

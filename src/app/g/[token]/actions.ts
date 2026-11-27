@@ -4,19 +4,20 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { setVisitorCookie } from "@/lib/share";
+import { getI18n } from "@/i18n/server";
 
 export type GateState = { error?: string } | null;
 
-const Schema = z.object({
-  token: z.string().regex(/^[A-Za-z0-9_-]{16,64}$/),
-  firstName: z.string().trim().min(1, "Escribe tu nombre").max(80),
-  lastName: z.string().trim().min(1, "Escribe tu apellido").max(80),
-  email: z.email("Correo inválido").transform((v) => v.trim().toLowerCase()),
-  consent: z.boolean(),
-});
-
 /** Registra al visitante (nombre, apellido, correo) y le da acceso a la galería. */
 export async function registerVisitor(_prev: GateState, formData: FormData): Promise<GateState> {
+  const s = (await getI18n()).t.portal.share;
+  const Schema = z.object({
+    token: z.string().regex(/^[A-Za-z0-9_-]{16,64}$/),
+    firstName: z.string().trim().min(1, s.errFirstName).max(80),
+    lastName: z.string().trim().min(1, s.errLastName).max(80),
+    email: z.email(s.errEmail).transform((v) => v.trim().toLowerCase()),
+    consent: z.boolean(),
+  });
   const parsed = Schema.safeParse({
     token: formData.get("token"),
     firstName: formData.get("firstName"),
@@ -24,7 +25,7 @@ export async function registerVisitor(_prev: GateState, formData: FormData): Pro
     email: formData.get("email"),
     consent: formData.get("consent") === "on",
   });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revisa los datos" };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? s.errCheck };
 
   const { token, firstName, lastName, email, consent } = parsed.data;
   const { data, error } = await createAdminClient().rpc("register_gallery_lead", {
@@ -36,7 +37,7 @@ export async function registerVisitor(_prev: GateState, formData: FormData): Pro
   });
   const row = data?.[0];
   if (error || !row) {
-    return { error: "Esta galería ya no está disponible. Pide un enlace nuevo a quien te la compartió." };
+    return { error: s.errGone };
   }
 
   await setVisitorCookie(row.project_id, row.lead_id);

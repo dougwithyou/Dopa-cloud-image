@@ -4,7 +4,7 @@ import { requireCreator } from "@/lib/auth";
 import { canUpload } from "@/lib/subscription";
 import { signDownloadUrl } from "@/lib/r2";
 import { ACCEPT_ATTRIBUTE } from "@/lib/upload-rules";
-import { PROJECT_STATUS_LABEL, PROJECT_TYPE_HELP, PROJECT_TYPE_LABEL } from "@/lib/format";
+import { getI18n } from "@/i18n/server";
 import { Uploader } from "@/components/uploader";
 import { SubmitButton } from "@/components/submit-button";
 import { AddClientToProjectForm, ProjectTitleEditor } from "../../forms";
@@ -27,11 +27,16 @@ import { FeedGridEditor } from "./feed-grid-editor";
 import { BackLink } from "@/components/back-home";
 import { Folder, folderColor, StatusTab } from "@/components/dashboard/folder";
 
-export const metadata = { title: "Proyecto" };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.project.meta };
+}
 
 export default async function ProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
   const { supabase, creator } = await requireCreator();
+  const { t } = await getI18n();
+  const P = t.project;
 
   const { data: project } = await supabase
     .from("projects")
@@ -48,9 +53,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
   const client = project.clients;
   const atClientLimit = creator.client_limit !== null && (clients?.length ?? 0) >= creator.client_limit;
   const newClientBlocked = !canUpload(creator)
-    ? "Tu suscripción no está activa: no puedes agregar clientes nuevos."
+    ? P.inactiveClients
     : atClientLimit
-      ? `Tu plan permite ${creator.client_limit} clientes. Elige uno existente o cambia de plan.`
+      ? P.clientLimit(creator.client_limit ?? 0)
       : undefined;
 
   const [{ data: postRows }, { data: assetRows }] = await Promise.all([
@@ -107,28 +112,28 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
 
   const uploadBlocked = canUpload(creator)
     ? undefined
-    : "Tu suscripción no está activa: las subidas nuevas están bloqueadas. Ve a Suscripción para resolverlo.";
+    : P.uploadBlocked;
 
   return (
     <div className="space-y-8">
       <div>
-        <BackLink href="/dashboard/projects">Proyectos</BackLink>
+        <BackLink href="/dashboard/projects">{P.projects}</BackLink>
         <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
           <Folder color={folderColor(project.type, project.status)} tab={<StatusTab status={project.status} />}>
             <div className="flex h-full flex-col px-5 pt-3 pb-5 sm:px-6">
               <ProjectTitleEditor projectId={project.id} title={project.title} />
-              <p className="mt-1 text-sm text-black/60">{PROJECT_TYPE_LABEL[project.type]}</p>
+              <p className="mt-1 text-sm text-black/60">{t.labels.projectType[project.type]}</p>
               <div className="mt-auto pt-5">
                 <div className="folder-dots" />
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
                 {project.type === "photo_session" ? (
                   <Link href={`/design/${project.id}`} className="btn-secondary">
-                    <ImageIcon className="h-4 w-4" /> Diseñar galería
+                    <ImageIcon className="h-4 w-4" /> {P.designGallery}
                   </Link>
                 ) : null}
                 <Link href={`/preview/${project.id}`} target="_blank" className="btn-secondary">
-                  <EyeIcon className="h-4 w-4" /> Vista previa
+                  <EyeIcon className="h-4 w-4" /> {P.preview}
                 </Link>
               </div>
             </div>
@@ -138,25 +143,25 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
             <svg viewBox="0 0 200 200" className="pointer-events-none absolute -right-16 -bottom-20 h-56 w-56 text-white/10" aria-hidden>
               <circle cx="100" cy="100" r="80" fill="none" stroke="currentColor" strokeWidth="22" />
             </svg>
-            <p className="relative text-lg">Detalles del proyecto</p>
+            <p className="relative text-lg">{P.details}</p>
             <dl className="relative mt-4 grid grid-cols-3 gap-3">
               <div>
-                <dt className="text-xs text-white/50">Estado</dt>
+                <dt className="text-xs text-white/50">{P.status}</dt>
                 <dd className="mt-1 flex items-center gap-1.5 text-sm">
                   <span
                     className={`h-2 w-2 rounded-full ${
                       project.status === "published" ? "bg-green-400" : project.status === "draft" ? "bg-dash-yellow" : "bg-white/40"
                     }`}
                   />
-                  {PROJECT_STATUS_LABEL[project.status]}
+                  {t.labels.projectStatus[project.status]}
                 </dd>
               </div>
               <div className="min-w-0">
-                <dt className="text-xs text-white/50">Cliente</dt>
-                <dd className="mt-1 truncate text-sm">{client?.name ?? "Sin cliente"}</dd>
+                <dt className="text-xs text-white/50">{P.client}</dt>
+                <dd className="mt-1 truncate text-sm">{client?.name ?? P.noClient}</dd>
               </div>
               <div>
-                <dt className="text-xs text-white/50">{isFeed ? "Publicaciones" : "Fotos"}</dt>
+                <dt className="text-xs text-white/50">{isFeed ? P.postsLabel : P.photosLabel}</dt>
                 <dd className="mt-1 text-sm">
                   {isFeed ? posts.length : files.filter((f) => f.kind === "photo" && f.upload_status === "complete").length}
                 </dd>
@@ -166,12 +171,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
               {project.status === "published"
                 ? client
                   ? client.user_id
-                    ? `Visible en el portal de ${client.name}.`
-                    : `${client.name} lo verá cuando entre con el enlace que le enviamos por correo.`
-                  : "Publicado, pero sin cliente: agrega uno para que alguien lo vea."
+                    ? P.visibleIn(client.name)
+                    : P.willSee(client.name)
+                  : P.publishedNoClient
                 : project.status === "draft"
-                  ? `Solo tú lo ves. Cuando lo publiques, ${client ? client.name : "el cliente"} recibirá su acceso.`
-                  : "Archivado: tu cliente ya no lo ve."}
+                  ? P.draftOnly(client ? client.name : null)
+                  : P.archivedNote}
             </p>
             <div className="relative mt-5 flex flex-wrap gap-2">
               {(["published", "draft", "archived"] as const)
@@ -184,7 +189,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
                       className={status === "published" ? "btn-brand" : "btn rounded-full bg-white/10 px-5 text-white hover:bg-white/20"}
                       pendingLabel="…"
                     >
-                      {status === "published" ? "Publicar" : status === "draft" ? "Pasar a borrador" : "Archivar"}
+                      {P.statusAction[status]}
                     </SubmitButton>
                   </form>
                 ))}
@@ -194,7 +199,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
       </div>
 
       <section className="card p-5">
-        <h2 className="mb-3 font-semibold">Plantilla para el cliente</h2>
+        <h2 className="mb-3 font-semibold">{P.template}</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           {(["monthly_content", "photo_session"] as const).map((type) => {
             const active = project.type === type;
@@ -212,18 +217,21 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
                   }`}
                 >
                   <span className="flex items-center justify-between text-sm font-semibold">
-                    {PROJECT_TYPE_LABEL[type]}
-                    {active ? <span className="badge bg-neutral-900 text-white">En uso</span> : null}
+                    {t.labels.projectType[type]}
+                    {active ? <span className="badge bg-neutral-900 text-white">{P.inUse}</span> : null}
                   </span>
-                  <span className="mt-1 block text-xs text-neutral-500">{PROJECT_TYPE_HELP[type]}</span>
+                  <span className="mt-1 block text-xs text-neutral-500">{t.labels.projectTypeHelp[type]}</span>
                 </button>
               </form>
             );
           })}
         </div>
         <p className="mt-3 text-xs text-neutral-500">
-          Usa <Link href={`/preview/${project.id}`} target="_blank" className="font-semibold text-neutral-900 underline">Vista previa</Link>{" "}
-          para ver exactamente lo que verá tu cliente.
+          {P.useA}
+          <Link href={`/preview/${project.id}`} target="_blank" className="font-semibold text-neutral-900 underline">
+            {P.preview}
+          </Link>
+          {P.useB}
         </p>
       </section>
 
@@ -232,29 +240,28 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="flex items-center gap-2 font-semibold">
-                <LinkIcon className="h-4 w-4" /> Compartir por enlace
+                <LinkIcon className="h-4 w-4" /> {P.share.title}
               </h2>
               <p className="mt-1 max-w-xl text-sm text-neutral-500">
-                Cualquiera con el enlace puede ver la galería después de dejar su nombre, apellido y correo. Los datos se
-                guardan en{" "}
+                {P.share.textA}
                 <Link href="/dashboard/contacts" className="font-semibold text-neutral-900 underline">
-                  Contactos
+                  {P.share.contacts}
                 </Link>
-                {leadCount > 0 ? ` (${leadCount} ${leadCount === 1 ? "persona" : "personas"} desde esta galería)` : ""}.
+                {leadCount > 0 ? P.share.people(leadCount) : ""}.
               </p>
             </div>
             {project.share_enabled ? (
               <form action={disableShareLink}>
                 <input type="hidden" name="projectId" value={project.id} />
                 <SubmitButton className="btn-secondary px-3 py-1.5 text-xs" pendingLabel="…">
-                  Desactivar
+                  {P.share.disable}
                 </SubmitButton>
               </form>
             ) : (
               <form action={enableShareLink}>
                 <input type="hidden" name="projectId" value={project.id} />
-                <SubmitButton className="btn-primary" pendingLabel="Activando…">
-                  <LinkIcon className="h-4 w-4" /> Activar enlace
+                <SubmitButton className="btn-primary" pendingLabel={P.share.enabling}>
+                  <LinkIcon className="h-4 w-4" /> {P.share.enable}
                 </SubmitButton>
               </form>
             )}
@@ -262,17 +269,17 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
           {project.share_enabled && project.share_token ? (
             <div className="mt-4 space-y-2">
               <div className="flex flex-col gap-2 sm:flex-row">
-                <input readOnly value={shareUrl(project.share_token)} className="input flex-1 font-mono text-xs" aria-label="Enlace de la galería" />
-                <CopyButton text={shareUrl(project.share_token)} className="btn-primary" label="Copiar enlace" />
+                <input readOnly value={shareUrl(project.share_token)} className="input flex-1 font-mono text-xs" aria-label={P.share.linkLabel} />
+                <CopyButton text={shareUrl(project.share_token)} className="btn-primary" label={P.share.copy} />
               </div>
               <form action={regenerateShareLink}>
                 <input type="hidden" name="projectId" value={project.id} />
                 <SubmitButton
                   className="btn-ghost px-0 text-xs text-neutral-500"
                   pendingLabel="…"
-                  confirm="¿Generar un enlace nuevo? El enlace actual dejará de funcionar."
+                  confirm={P.share.confirmNew}
                 >
-                  Generar un enlace nuevo
+                  {P.share.regenerate}
                 </SubmitButton>
               </form>
             </div>
@@ -285,19 +292,19 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="flex items-center gap-2 font-semibold">
-                <BagIcon className="h-4 w-4" /> Tienda de impresiones
+                <BagIcon className="h-4 w-4" /> {P.store.title}
               </h2>
               <p className="mt-1 max-w-xl text-sm text-neutral-500">
                 {project.store_enabled
-                  ? "Activa: tus clientes ven “Comprar impresión” en cada foto. El laboratorio produce y envía; tú recibes tu ganancia."
-                  : "Deja que tus clientes compren impresiones y cuadros de estas fotos, con tu margen."}{" "}
+                  ? P.store.on
+                  : P.store.off}{" "}
                 <Link href="/dashboard/store" className="font-semibold text-neutral-900 underline">
-                  Precios y cobros
+                  {P.store.prices}
                 </Link>
               </p>
               {project.store_enabled && !creator.connect_payouts_enabled ? (
                 <p className="mt-2 text-sm text-amber-700">
-                  Falta conectar tus cobros: hasta entonces la tienda no se muestra a tus clientes.
+                  {P.store.needsPayouts}
                 </p>
               ) : null}
             </div>
@@ -305,7 +312,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
               <input type="hidden" name="projectId" value={project.id} />
               <input type="hidden" name="enabled" value={project.store_enabled ? "false" : "true"} />
               <SubmitButton className={project.store_enabled ? "btn-secondary" : "btn-primary"} pendingLabel="…">
-                {project.store_enabled ? "Desactivar" : "Activar tienda"}
+                {project.store_enabled ? P.store.disable : P.store.enable}
               </SubmitButton>
             </form>
           </div>
@@ -313,7 +320,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
       ) : null}
 
       <section className="card p-5">
-        <h2 className="mb-1 font-semibold">Cliente</h2>
+        <h2 className="mb-1 font-semibold">{P.clientSection.title}</h2>
         {client ? (
           <div className="space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -322,11 +329,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
                 <p className="text-sm text-neutral-500">{client.email}</p>
                 <p className="mt-1 text-xs">
                   {client.user_id ? (
-                    <span className="badge bg-green-50 text-green-700">Ya tiene acceso a su portal</span>
+                    <span className="badge bg-green-50 text-green-700">{P.clientSection.hasAccess}</span>
                   ) : client.invited_at ? (
-                    <span className="badge bg-amber-50 text-amber-700">Acceso enviado, aún no ha entrado</span>
+                    <span className="badge bg-amber-50 text-amber-700">{P.clientSection.invited}</span>
                   ) : (
-                    <span className="badge bg-neutral-100 text-neutral-700">Recibirá su acceso al publicar</span>
+                    <span className="badge bg-neutral-100 text-neutral-700">{P.clientSection.onPublish}</span>
                   )}
                 </p>
               </div>
@@ -334,22 +341,22 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
                 <input type="hidden" name="projectId" value={project.id} />
                 <SubmitButton
                   className="btn-secondary px-3 py-1.5 text-xs"
-                  pendingLabel="Quitando…"
-                  confirm={`¿Quitar a ${client.name} de este proyecto? Dejará de verlo en su portal.`}
+                  pendingLabel={P.clientSection.removing}
+                  confirm={P.clientSection.confirmRemove(client.name)}
                 >
-                  Quitar del proyecto
+                  {P.clientSection.remove}
                 </SubmitButton>
               </form>
             </div>
             <details>
-              <summary className="cursor-pointer text-sm text-neutral-500 hover:text-neutral-900">Cambiar de cliente</summary>
+              <summary className="cursor-pointer text-sm text-neutral-500 hover:text-neutral-900">{P.clientSection.change}</summary>
               <div className="mt-3">
                 <AddClientToProjectForm
                   projectId={project.id}
                   clients={clients ?? []}
                   currentClientId={project.client_id}
                   disabledReason={newClientBlocked}
-                  submitLabel="Cambiar cliente"
+                  submitLabel={P.clientSection.changeSubmit}
                 />
               </div>
             </details>
@@ -357,7 +364,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-neutral-500">
-              Este proyecto aún no tiene cliente. Agrégalo para que pueda verlo en su portal.
+              {P.clientSection.none}
             </p>
             <AddClientToProjectForm projectId={project.id} clients={clients ?? []} disabledReason={newClientBlocked} />
           </div>
@@ -367,12 +374,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
       <section className="space-y-4">
         <div>
           <h2 className="flex items-center gap-2.5 text-xl tracking-tight">
-            <StepNumber n={1} /> Material del proyecto
+            <StepNumber n={1} /> {P.media.title}
           </h2>
           <p className="text-sm text-neutral-500">
             {isFeed
-              ? "Sube aquí todo el material. Después selecciona archivos para armar cada publicación o carrusel."
-              : "Sube aquí todas las fotos y videos de la sesión. Tu cliente verá la galería completa, en este orden."}
+              ? P.media.feedHelp
+              : P.media.galleryHelp}
           </p>
         </div>
         <Uploader projectId={project.id} accept={ACCEPT_ATTRIBUTE} disabledReason={uploadBlocked} />
@@ -382,8 +389,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
           items={library}
           posts={posts.map((p, i) =>
             isFeed
-              ? { id: p.id, label: `Publicación ${i + 1}${p.assets.length > 1 ? ` (carrusel · ${p.assets.length})` : ""}` }
-              : { id: p.id, label: `Escena ${i + 1}${p.caption ? ` · ${p.caption.split("\n")[0]}` : ""}` },
+              ? { id: p.id, label: P.media.postLabel(i + 1, p.assets.length) }
+              : { id: p.id, label: P.media.sceneLabel(i + 1, p.caption ? p.caption.split("\n")[0] : null) },
           )}
         />
       </section>
@@ -391,14 +398,14 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
       {isFeed ? (
         <section>
           <h2 className="flex items-center gap-2.5 text-xl tracking-tight">
-            <StepNumber n={2} /> Publicaciones <span className="text-neutral-400">({posts.length})</span>
+            <StepNumber n={2} /> {P.postsSection.title} <span className="text-neutral-400">({posts.length})</span>
           </h2>
           <p className="mb-3 text-sm text-neutral-500">
-            Así verá el feed tu cliente. Arrástralas para cambiar el orden y toca una para editar su copy.
+            {P.postsSection.help}
           </p>
           {posts.length === 0 ? (
             <div className="card p-8 text-center text-sm text-neutral-500">
-              Aún no hay publicaciones. Selecciona archivos en el material y pulsa “Crear publicación”.
+              {P.postsSection.empty}
             </div>
           ) : (
             <FeedGridEditor projectId={project.id} posts={posts} />
@@ -409,19 +416,19 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
           <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="flex items-center gap-2.5 text-xl tracking-tight">
-                <StepNumber n={2} /> Escenas <span className="text-neutral-400">({posts.length})</span>
+                <StepNumber n={2} /> {P.scenesSection.title} <span className="text-neutral-400">({posts.length})</span>
               </h2>
               <p className="text-sm text-neutral-500">
-                Opcional: secciones con título, como “Ceremonia” o “Recepción”. Las fotos sin escena aparecen al final.
+                {P.scenesSection.help}
               </p>
             </div>
             <Link href={`/design/${project.id}`} className="btn-primary">
-              <ImageIcon className="h-4 w-4" /> Diseñar galería
+              <ImageIcon className="h-4 w-4" /> {P.designGallery}
             </Link>
           </div>
           {posts.length === 0 ? (
             <div className="card p-6 text-center text-sm text-neutral-500">
-              Sin escenas: tu cliente ve todas las fotos juntas. Para crear una, selecciona fotos en el material y pulsa “Crear escena”.
+              {P.scenesSection.empty}
             </div>
           ) : (
             <ul className="space-y-4">
@@ -436,8 +443,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
       <section className="border-t border-neutral-200 pt-6">
         <form action={deleteProject}>
           <input type="hidden" name="projectId" value={project.id} />
-          <SubmitButton className="btn-danger" pendingLabel="Eliminando…" confirm="¿Eliminar el proyecto y todos sus archivos? No se puede deshacer.">
-            Eliminar proyecto y todos sus archivos
+          <SubmitButton className="btn-danger" pendingLabel={P.deleting} confirm={P.confirmDelete}>
+            {P.delete}
           </SubmitButton>
         </form>
       </section>

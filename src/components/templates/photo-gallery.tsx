@@ -7,6 +7,8 @@ import { pad, slugify, type ZipEntry } from "@/lib/zip-download";
 import { SaveToPhotosButton, useSaveToPhotosPlatform } from "@/components/save-to-photos";
 import { BuyPrintDialog, CartButton } from "@/components/store/buy-print-dialog";
 import { StoreSheet } from "@/components/store/store-sheet";
+import { LanguageSwitch } from "@/components/language-switch";
+import { useI18n } from "@/i18n/client";
 import { isPrintable, type StoreConfig } from "@/lib/store-types";
 import {
   FONTS,
@@ -64,6 +66,7 @@ function Lightbox({
   hrefFor: (id: string) => string;
   store?: StoreConfig | null;
 }) {
+  const g = useI18n().t.gallery;
   const item = items[index];
   const [buying, setBuying] = useState(false);
   const canBuy = Boolean(store?.products.some((p) => p.completion === "api")) && isPrintable(item);
@@ -112,7 +115,7 @@ function Lightbox({
               onClick={() => setBuying(true)}
               className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-neutral-900"
             >
-              Comprar impresión
+              {g.buyPrint}
             </button>
           ) : null}
           <SaveToPhotosButton
@@ -124,9 +127,9 @@ function Lightbox({
             download
             className="inline-flex items-center gap-2 rounded-full border border-white/30 px-3 py-1.5 text-xs hover:bg-white/10"
           >
-            <DownloadIcon /> <span className={canBuy ? "hidden sm:inline" : ""}>Descargar</span>
+            <DownloadIcon /> <span className={canBuy ? "hidden sm:inline" : ""}>{g.download}</span>
           </a>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="px-2 text-3xl leading-none text-white/80 hover:text-white">
+          <button type="button" onClick={onClose} aria-label={g.close} className="px-2 text-3xl leading-none text-white/80 hover:text-white">
             ×
           </button>
         </div>
@@ -143,7 +146,7 @@ function Lightbox({
           <button
             type="button"
             onClick={prev}
-            aria-label="Anterior"
+            aria-label={g.previous}
             className="absolute left-2 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-3xl text-white/70 hover:bg-white/10 hover:text-white sm:flex"
           >
             ‹
@@ -153,7 +156,7 @@ function Lightbox({
           <button
             type="button"
             onClick={next}
-            aria-label="Siguiente"
+            aria-label={g.next}
             className="absolute right-2 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-3xl text-white/70 hover:bg-white/10 hover:text-white sm:flex"
           >
             ›
@@ -195,6 +198,7 @@ function Cover({
   subtitle: string;
   cover: FeedMedia | undefined;
 }) {
+  const g = useI18n().t.gallery;
   const palette = PALETTES[design.palette];
   const ts = titleStyle(design);
   const cta = (light: boolean) => (
@@ -203,7 +207,7 @@ function Cover({
       className="mt-8 inline-block border px-6 py-2.5 text-xs uppercase tracking-[0.3em] transition hover:opacity-70"
       style={{ borderColor: light ? "rgba(255,255,255,.8)" : palette.text, color: light ? "#fff" : palette.text }}
     >
-      Ver galería
+      {g.viewGallery}
     </a>
   );
 
@@ -270,6 +274,7 @@ function Masonry({
   onOpen: (index: number) => void;
   hrefFor: (id: string) => string;
 }) {
+  const g = useI18n().t.gallery;
   const { ref, count: columnCount } = useColumnCount(design.size);
   // En el teléfono se guarda desde el visor ("Guardar en Fotos"); el ícono de
   // descarga directa enviaría el archivo a la app Archivos.
@@ -284,7 +289,7 @@ function Masonry({
         <div key={c} className="flex min-w-0 flex-1 flex-col" style={{ gap }}>
           {column.map(({ m, i }) => (
             <div key={m.id} className="group relative">
-              <button type="button" onClick={() => onOpen(offset + i)} className="block w-full" aria-label={`Ver ${m.file_name}`}>
+              <button type="button" onClick={() => onOpen(offset + i)} className="block w-full" aria-label={g.view(m.file_name)}>
                 {m.kind === "photo" ? (
                   // eslint-disable-next-line @next/next/no-img-element -- URL firmada de R2
                   <img src={m.url} alt={m.file_name} loading={offset + i < 8 ? "eager" : "lazy"} className="block h-auto w-full bg-black/5" />
@@ -299,7 +304,7 @@ function Masonry({
               <a
                 href={hrefFor(m.id)}
                 download
-                aria-label={`Descargar ${m.file_name}`}
+                aria-label={g.downloadName(m.file_name)}
                 className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-neutral-900 opacity-100 shadow transition sm:opacity-0 sm:group-hover:opacity-100"
               >
                 <DownloadIcon />
@@ -344,6 +349,7 @@ export function PhotoGalleryTemplate({
   /** Tienda de impresiones de la galería (si el fotógrafo la activó). */
   store?: StoreConfig | null;
 }) {
+  const g = useI18n().t.gallery;
   const palette = PALETTES[design.palette];
   const [open, setOpen] = useState<number | null>(null);
   const [shopping, setShopping] = useState(false);
@@ -355,7 +361,7 @@ export function PhotoGalleryTemplate({
   const rest = items.filter((m) => !inScenes.has(m.id));
   const sections: GalleryScene[] =
     withMedia.length > 0
-      ? [...withMedia, ...(rest.length > 0 ? [{ id: "mas-fotos", title: "Más fotos", media: rest }] : [])]
+      ? [...withMedia, ...(rest.length > 0 ? [{ id: "mas-fotos", title: g.morePhotos, media: rest }] : [])]
       : [{ id: "todas", title: "", media: items }];
   const ordered = sections.flatMap((s) => s.media);
 
@@ -386,7 +392,7 @@ export function PhotoGalleryTemplate({
               {title}
             </p>
             <p className="text-xs" style={{ color: palette.muted }}>
-              {ordered.length} {ordered.length === 1 ? "archivo" : "archivos"} · {authorName}
+              {g.fileCount(ordered.length)} · {authorName}
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-2">
@@ -396,7 +402,7 @@ export function PhotoGalleryTemplate({
               onClick={() => setShopping(true)}
               className="btn shrink-0 rounded-none border border-current px-3 py-2 text-[11px] uppercase tracking-widest"
             >
-              Tienda
+              {g.store}
             </button>
           ) : null}
           {store ? (
@@ -407,20 +413,20 @@ export function PhotoGalleryTemplate({
           ) : null}
           <SaveToPhotosButton
             media={ordered}
-            label="Guardar en Fotos"
+            label={g.saveToPhotos}
             className="btn rounded-none border border-current px-3 py-2 text-[11px] uppercase tracking-widest"
           />
           <DownloadAllButton
             entries={entries}
             zipName={`${zipPrefix}.zip`}
-            label="↓ Descargar todo"
+            label={g.downloadAll}
             className="btn shrink-0 rounded-none px-3 py-2 text-[11px] uppercase tracking-widest sm:px-4 sm:text-xs"
             style={{ background: palette.text, color: palette.bg }}
           />
           </div>
         </div>
         {multi ? (
-          <nav className="mx-auto flex max-w-7xl gap-6 overflow-x-auto px-4 pb-2 text-sm sm:px-8" aria-label="Escenas">
+          <nav className="mx-auto flex max-w-7xl gap-6 overflow-x-auto px-4 pb-2 text-sm sm:px-8" aria-label={g.scenes}>
             {sections.map((s) => (
               <a key={s.id} href={`#escena-${s.id}`} className="shrink-0 whitespace-nowrap py-1 hover:underline" style={{ fontFamily: FONTS[design.font].family }}>
                 {s.title}
@@ -433,7 +439,7 @@ export function PhotoGalleryTemplate({
       <section className="mx-auto max-w-7xl px-2 py-6 sm:px-8 sm:py-10">
         {ordered.length === 0 ? (
           <p className="py-16 text-center text-sm" style={{ color: palette.muted }}>
-            Esta galería todavía no tiene fotos.
+            {g.emptyGallery}
           </p>
         ) : (
           sections.map((s, si) => {
@@ -453,8 +459,9 @@ export function PhotoGalleryTemplate({
         )}
       </section>
 
-      <footer className="py-12 text-center text-xs uppercase tracking-[0.3em]" style={{ color: palette.muted }}>
+      <footer className="flex flex-col items-center gap-4 py-12 text-center text-xs uppercase tracking-[0.3em]" style={{ color: palette.muted }}>
         {authorName}
+        <LanguageSwitch className="tracking-wide" />
       </footer>
 
       {open !== null ? <Lightbox items={ordered} index={open} onClose={() => setOpen(null)} onNavigate={setOpen} hrefFor={hrefFor} store={store} /> : null}

@@ -5,6 +5,7 @@ import type { FeedMedia } from "@/components/feed-post";
 import { formatUsd } from "@/lib/print-pricing";
 import { isLowResolution, type StoreConfig, type StoreProduct } from "@/lib/store-types";
 import { useCart } from "./cart";
+import { useI18n } from "@/i18n/client";
 
 
 /** Precio "desde" de un grupo de productos. */
@@ -18,6 +19,7 @@ function fromPrice(list: StoreProduct[]) {
  */
 export function BuyPrintDialog({ media, store, onClose }: { media: FeedMedia; store: StoreConfig; onClose: () => void }) {
   const cart = useCart(store.projectId);
+  const s = useI18n().t.store;
   const categories = useMemo(() => {
     const map = new Map<string, { ref: string; name: string; products: StoreProduct[] }>();
     // Desde una foto solo se piden productos de una foto (impresiones y canvas).
@@ -65,12 +67,12 @@ export function BuyPrintDialog({ media, store, onClose }: { media: FeedMedia; st
   if (!size) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 sm:items-center sm:p-6" role="dialog" aria-modal aria-label="Comprar impresión">
-      <button type="button" className="absolute inset-0 cursor-default" aria-label="Cerrar" onClick={onClose} />
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 sm:items-center sm:p-6" role="dialog" aria-modal aria-label={s.buyPrint}>
+      <button type="button" className="absolute inset-0 cursor-default" aria-label={s.close} onClick={onClose} />
       <div className="relative flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl bg-white text-neutral-900 sm:rounded-3xl">
         <header className="flex items-center justify-between border-b border-neutral-100 px-5 py-4">
-          <p className="font-semibold">Comprar impresión</p>
-          <button type="button" onClick={onClose} className="text-2xl leading-none text-neutral-400 hover:text-neutral-900" aria-label="Cerrar">
+          <p className="font-semibold">{s.buyPrint}</p>
+          <button type="button" onClick={onClose} className="text-2xl leading-none text-neutral-400 hover:text-neutral-900" aria-label={s.close}>
             ×
           </button>
         </header>
@@ -87,10 +89,10 @@ export function BuyPrintDialog({ media, store, onClose }: { media: FeedMedia; st
                 onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
               />
             </div>
-            <p className="text-center text-xs text-neutral-500">Recorte centrado a {size.sizeLabel}</p>
+            <p className="text-center text-xs text-neutral-500">{s.cropTo(size.sizeLabel)}</p>
             {lowRes ? (
               <p className="rounded-full bg-amber-100 px-3 py-1 text-center text-xs text-amber-800">
-                La foto puede verse poco nítida a este tamaño. Prueba uno más pequeño.
+                {s.lowRes}
               </p>
             ) : null}
           </div>
@@ -119,7 +121,7 @@ export function BuyPrintDialog({ media, store, onClose }: { media: FeedMedia; st
 
             {productRefs.length > 1 ? (
               <div>
-                <p className="mb-2 text-xs font-semibold tracking-wide text-neutral-500 uppercase">Producto</p>
+                <p className="mb-2 text-xs font-semibold tracking-wide text-neutral-500 uppercase">{s.product}</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {productRefs.map(([ref, list]) => (
                     <button
@@ -133,7 +135,7 @@ export function BuyPrintDialog({ media, store, onClose }: { media: FeedMedia; st
                       className={`rounded-xl border px-3 py-2 text-left text-sm transition ${ref === productRef ? "border-neutral-900 ring-1 ring-neutral-900" : "border-neutral-200 hover:border-neutral-400"}`}
                     >
                       <span className="block font-medium">{list[0].productName}</span>
-                      <span className="text-xs text-neutral-500">desde {formatUsd(fromPrice(list))}</span>
+                      <span className="text-xs text-neutral-500">{s.fromLower(formatUsd(fromPrice(list)))}</span>
                     </button>
                   ))}
                 </div>
@@ -143,7 +145,7 @@ export function BuyPrintDialog({ media, store, onClose }: { media: FeedMedia; st
             )}
 
             <div>
-              <p className="mb-2 text-xs font-semibold tracking-wide text-neutral-500 uppercase">Tamaño (pulgadas)</p>
+              <p className="mb-2 text-xs font-semibold tracking-wide text-neutral-500 uppercase">{s.sizeInches}</p>
               <div className="grid grid-cols-3 gap-2">
                 {sizes.map((s) => (
                   <button
@@ -164,11 +166,11 @@ export function BuyPrintDialog({ media, store, onClose }: { media: FeedMedia; st
 
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center rounded-full border border-neutral-200">
-                <button type="button" className="h-10 w-10 text-lg" onClick={() => setQuantity((q) => Math.max(1, q - 1))} aria-label="Menos">
+                <button type="button" className="h-10 w-10 text-lg" onClick={() => setQuantity((q) => Math.max(1, q - 1))} aria-label={s.less}>
                   −
                 </button>
                 <span className="w-8 text-center tabular-nums">{quantity}</span>
-                <button type="button" className="h-10 w-10 text-lg" onClick={() => setQuantity((q) => Math.min(100, q + 1))} aria-label="Más">
+                <button type="button" className="h-10 w-10 text-lg" onClick={() => setQuantity((q) => Math.min(100, q + 1))} aria-label={s.more}>
                   +
                 </button>
               </div>
@@ -178,10 +180,10 @@ export function BuyPrintDialog({ media, store, onClose }: { media: FeedMedia; st
             {added ? (
               <div className="flex flex-col gap-2 sm:flex-row">
                 <a href={store.cartHref} className="flex-1 rounded-full bg-neutral-900 px-5 py-3 text-center text-sm font-semibold text-white">
-                  Ver carrito ({cart.count})
+                  {s.viewCart} ({cart.count})
                 </a>
                 <button type="button" onClick={onClose} className="flex-1 rounded-full border border-neutral-300 px-5 py-3 text-sm font-semibold">
-                  Seguir viendo
+                  {s.keepBrowsing}
                 </button>
               </div>
             ) : (
@@ -193,11 +195,11 @@ export function BuyPrintDialog({ media, store, onClose }: { media: FeedMedia; st
                 }}
                 className="w-full rounded-full bg-neutral-900 px-5 py-3 text-sm font-semibold text-white hover:bg-neutral-700"
               >
-                Agregar al carrito
+                {s.addToCart}
               </button>
             )}
             <p className="text-xs text-neutral-500">
-              Impreso por un laboratorio profesional y enviado a tu casa en EE.UU. Envío desde {formatUsd(store.shippingPerGroupCents)}.
+              {s.labNote(formatUsd(store.shippingPerGroupCents))}
             </p>
           </div>
         </div>
@@ -209,10 +211,11 @@ export function BuyPrintDialog({ media, store, onClose }: { media: FeedMedia; st
 /** Botón del carrito en la barra de la galería (solo si hay algo). */
 export function CartButton({ store, className = "", style }: { store: StoreConfig; className?: string; style?: React.CSSProperties }) {
   const { count } = useCart(store.projectId);
+  const s = useI18n().t.store;
   if (count === 0) return null;
   return (
     <a href={store.cartHref} className={className} style={style}>
-      Carrito ({count})
+      {s.cart(count)}
     </a>
   );
 }

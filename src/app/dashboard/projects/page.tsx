@@ -3,21 +3,21 @@ import { requireCreator } from "@/lib/auth";
 import { loadProjectCovers } from "@/lib/project-covers";
 import { ProjectFolder } from "@/components/dashboard/folder";
 import { FolderPlusIcon } from "@/components/icons";
+import { getI18n } from "@/i18n/server";
 
-export const metadata = { title: "Proyectos anteriores" };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.dash.projectsPage.meta };
+}
 
-const FILTERS = [
-  { key: "todos", label: "Todos" },
-  { key: "draft", label: "Borradores" },
-  { key: "published", label: "Publicados" },
-  { key: "archived", label: "Archivados" },
-] as const;
-type FilterKey = (typeof FILTERS)[number]["key"];
+const FILTERS = ["todos", "draft", "published", "archived"] as const;
+type FilterKey = (typeof FILTERS)[number];
 
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<{ estado?: string }> }) {
   const { supabase } = await requireCreator();
   const { estado } = await searchParams;
-  const filter: FilterKey = FILTERS.some((f) => f.key === estado) ? (estado as FilterKey) : "todos";
+  const filter: FilterKey = FILTERS.some((f) => f === estado) ? (estado as FilterKey) : "todos";
+  const pp = (await getI18n()).t.dash.projectsPage;
 
   const { data: all } = await supabase
     .from("projects")
@@ -31,22 +31,22 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h1 className="dash-title">
-          Proyectos<sup>({all?.length ?? 0})</sup>
+          {pp.title}<sup>({all?.length ?? 0})</sup>
         </h1>
         <Link href="/dashboard/projects/new" className="btn-primary py-3">
-          <FolderPlusIcon className="h-4 w-4" /> Nuevo proyecto
+          <FolderPlusIcon className="h-4 w-4" /> {pp.newProject}
         </Link>
       </div>
 
-      <nav className="seg" aria-label="Filtrar por estado">
+      <nav className="seg" aria-label={pp.filterLabel}>
         {FILTERS.map((f) => (
           <Link
-            key={f.key}
-            href={f.key === "todos" ? "/dashboard/projects" : `/dashboard/projects?estado=${f.key}`}
-            aria-current={filter === f.key ? "page" : undefined}
+            key={f}
+            href={f === "todos" ? "/dashboard/projects" : `/dashboard/projects?estado=${f}`}
+            aria-current={filter === f ? "page" : undefined}
             scroll={false}
           >
-            {f.label} <span className="opacity-60">{countFor(f.key)}</span>
+            {pp.filters[f]} <span className="opacity-60">{countFor(f)}</span>
           </Link>
         ))}
       </nav>
@@ -74,14 +74,14 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
         <div className="card p-8 text-center text-sm text-neutral-500">
           {filter === "todos" ? (
             <>
-              Aún no hay proyectos.{" "}
+              {pp.none}{" "}
               <Link href="/dashboard/projects/new" className="font-semibold text-neutral-900">
-                Crea el primero
+                {pp.createFirst}
               </Link>
               .
             </>
           ) : (
-            "No hay proyectos con este estado."
+            pp.noneWithStatus
           )}
         </div>
       )}

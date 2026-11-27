@@ -6,6 +6,7 @@ import { DownloadAllButton } from "@/components/download-all-button";
 import { MediaCarousel } from "@/components/media-carousel";
 import { SaveToPhotosButton, useSaveToPhotosPlatform } from "@/components/save-to-photos";
 import { pad, type ZipEntry } from "@/lib/zip-download";
+import { useI18n } from "@/i18n/client";
 
 export interface FeedMedia {
   id: string;
@@ -54,37 +55,39 @@ export function PostActions({ post, current, zipBase }: { post: FeedPostData; cu
   const active = post.media[current];
   // En el teléfono, lo principal es guardar en Fotos; la descarga va a Archivos.
   const mobile = useSaveToPhotosPlatform() !== null;
+  const g = useI18n().t.gallery;
+  const pos = count > 1 ? ` ${current + 1}/${count}` : "";
   return (
     <div className="flex flex-wrap gap-2">
       {active ? (
         <SaveToPhotosButton
           media={[active]}
-          label={`Guardar ${active.kind === "video" ? "video" : "foto"}${count > 1 ? ` ${current + 1}/${count}` : ""} en Fotos`}
+          label={g.saveItem(active.kind === "video", pos)}
           className="btn-primary px-3 py-1.5 text-xs"
         />
       ) : null}
       {count > 1 ? (
         <SaveToPhotosButton
           media={post.media}
-          label={`Guardar carrusel en Fotos (${count})`}
+          label={g.saveCarousel(count)}
           className="btn-secondary px-3 py-1.5 text-xs"
         />
       ) : null}
       {active ? (
         <a href={downloadHref(active.id)} className={`${mobile ? "btn-secondary" : "btn-primary"} px-3 py-1.5 text-xs`} download>
-          ↓ {mobile ? "Archivos" : `Descargar ${active.kind === "video" ? "video" : "foto"}`}
-          {count > 1 ? ` ${current + 1}/${count}` : ""}
+          ↓ {mobile ? g.files : g.downloadItem(active.kind === "video")}
+          {pos}
         </a>
       ) : null}
       {count > 1 && !mobile ? (
         <DownloadAllButton
           entries={postZipEntries(post)}
           zipName={`${zipBase}.zip`}
-          label={`↓ Descargar carrusel (${count})`}
+          label={g.downloadCarousel(count)}
           className="btn-secondary px-3 py-1.5 text-xs"
         />
       ) : null}
-      {post.caption ? <CopyButton text={post.caption} className="btn-secondary px-3 py-1.5 text-xs" label="Copiar copy" /> : null}
+      {post.caption ? <CopyButton text={post.caption} className="btn-secondary px-3 py-1.5 text-xs" label={g.copyCaption} /> : null}
     </div>
   );
 }
@@ -104,19 +107,20 @@ export function FeedPost({
   const [current, setCurrent] = useState(0);
   const onIndexChange = useCallback((i: number) => setCurrent(i), []);
   const count = post.media.length;
+  const g = useI18n().t.gallery;
 
   return (
     <article id={`post-${post.id}`} className="bg-white">
       <header className="flex items-center gap-3 px-4 py-3">
         <Avatar name={authorName} />
         <span className="text-sm font-semibold">{authorName}</span>
-        <span className="ml-auto text-xs text-neutral-400">{count > 1 ? `Carrusel · ${count}` : `#${index + 1}`}</span>
+        <span className="ml-auto text-xs text-neutral-400">{count > 1 ? g.carouselCount(count) : `#${index + 1}`}</span>
       </header>
 
       {count > 0 ? <MediaCarousel media={post.media} onIndexChange={onIndexChange} eager={index < 2} /> : null}
 
       <div className="px-4 pt-3">
-        <PostActions post={post} current={current} zipBase={`${zipPrefix}-publicacion-${pad(index + 1)}`} />
+        <PostActions post={post} current={current} zipBase={`${zipPrefix}-${g.postSlug}-${pad(index + 1)}`} />
       </div>
 
       {post.caption ? (

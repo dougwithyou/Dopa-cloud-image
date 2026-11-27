@@ -3,8 +3,12 @@ import { requireUser } from "@/lib/auth";
 import { loadProjectContent } from "@/lib/project-content";
 import { ProjectView } from "@/components/templates/project-view";
 import { loadStoreConfig } from "@/lib/store";
+import { getI18n } from "@/i18n/server";
 
-export const metadata = { title: "Tu contenido" };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.portal.yourContent };
+}
 
 export default async function PortalProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
@@ -27,7 +31,7 @@ export default async function PortalProjectPage({ params }: { params: Promise<{ 
     supabase.rpc("my_creators"),
     project.type === "photo_session" ? loadStoreConfig(project.id) : null,
   ]);
-  const authorName = (creators ?? []).find((c) => c.id === project.creator_id)?.business_name ?? "Tu creador";
+  const authorName = (creators ?? []).find((c) => c.id === project.creator_id)?.business_name ?? (await getI18n()).t.portal.yourCreator;
 
   return <ProjectView project={project} authorName={authorName} posts={content.posts} library={content.library} store={store} />;
 }

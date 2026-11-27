@@ -6,19 +6,24 @@ import { getStoreAccess, loadStoreProducts, publicProducts } from "@/lib/store";
 import { shippingCentsFor } from "@/lib/print-pricing";
 import { isPrintable } from "@/lib/store-types";
 import { CartView } from "./cart-view";
+import { getI18n } from "@/i18n/server";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Carrito", robots: { index: false, follow: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t.store.cartMeta, robots: { index: false, follow: false } };
+}
 
 /** Carrito y datos de envío de la tienda de una galería. */
 export default async function CartPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
   const access = await getStoreAccess(projectId);
+  const s = (await getI18n()).t.store;
   if (!access) {
     return (
       <main className="flex min-h-dvh flex-col items-center justify-center bg-neutral-50 px-4 text-center">
-        <h1 className="text-2xl font-semibold">La tienda no está disponible</h1>
-        <p className="mt-2 max-w-sm text-sm text-neutral-500">Vuelve a la galería desde el enlace que te enviaron e inténtalo de nuevo.</p>
+        <h1 className="text-2xl font-semibold">{s.unavailableTitle}</h1>
+        <p className="mt-2 max-w-sm text-sm text-neutral-500">{s.unavailableText}</p>
       </main>
     );
   }
@@ -47,7 +52,7 @@ export default async function CartPage({ params }: { params: Promise<{ projectId
       <header className="border-b border-neutral-200 bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-4">
           <Link href={access.galleryHref} className="text-sm text-neutral-500 hover:text-neutral-900">
-            ← Volver a la galería
+            {s.backToGallery}
           </Link>
           <p className="truncate text-sm font-semibold">{access.creator.business_name}</p>
         </div>

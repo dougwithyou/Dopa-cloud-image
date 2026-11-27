@@ -29,24 +29,24 @@ export function maxBytesFor(kind: MediaKind): number {
 
 export type UploadValidation =
   | { ok: true; kind: MediaKind; mimeType: string }
-  | { ok: false; error: string };
+  | { ok: false; error: string; code: "type" | "ext" | "size" | "too_big"; ext?: string; maxMb?: number };
 
 export function validateUpload(input: { fileName: string; mimeType: string; size: number }): UploadValidation {
   const mimeType = input.mimeType.toLowerCase().trim();
   const rule = ALLOWED[mimeType];
-  if (!rule) return { ok: false, error: `Tipo de archivo no permitido: ${input.mimeType || "desconocido"}` };
+  if (!rule) return { ok: false, code: "type", error: `Tipo de archivo no permitido: ${input.mimeType || "desconocido"}` };
 
   const ext = input.fileName.toLowerCase().split(".").pop() ?? "";
   if (!rule.extensions.includes(ext)) {
-    return { ok: false, error: `La extensión .${ext} no coincide con el tipo ${mimeType}` };
+    return { ok: false, code: "ext", ext, error: `La extensión .${ext} no coincide con el tipo ${mimeType}` };
   }
 
   if (!Number.isSafeInteger(input.size) || input.size <= 0) {
-    return { ok: false, error: "Tamaño de archivo inválido" };
+    return { ok: false, code: "size", error: "Tamaño de archivo inválido" };
   }
   const max = maxBytesFor(rule.kind);
   if (input.size > max) {
-    return { ok: false, error: `El archivo supera el máximo de ${Math.round(max / MB)} MB` };
+    return { ok: false, code: "too_big", maxMb: Math.round(max / MB), error: `El archivo supera el máximo de ${Math.round(max / MB)} MB` };
   }
   return { ok: true, kind: rule.kind, mimeType };
 }

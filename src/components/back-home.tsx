@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowLeftIcon } from "@/components/icons";
+import { useI18n } from "@/i18n/client";
 
 /**
  * Enlace "← Inicio" en las pantallas de primer nivel del panel (clientes,
@@ -11,10 +12,11 @@ import { ArrowLeftIcon } from "@/components/icons";
  */
 export function BackHome() {
   const pathname = usePathname();
+  const { t } = useI18n();
   const parts = pathname.split("/").filter(Boolean);
   const isTopLevel = parts.length === 2 || pathname === "/dashboard/projects/new";
   if (!isTopLevel) return null;
-  return <BackLink href="/dashboard">Inicio</BackLink>;
+  return <BackLink href="/dashboard">{t.dash.home}</BackLink>;
 }
 
 export function BackLink({ href, children }: { href: string; children: React.ReactNode }) {

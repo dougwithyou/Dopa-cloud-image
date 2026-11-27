@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FeedMedia } from "@/components/feed-post";
 import { formatUsd } from "@/lib/print-pricing";
-import { CARD_OCCASIONS, KIND_LABEL } from "@/lib/print-offerings";
+import { CARD_OCCASIONS } from "@/lib/print-offerings";
+import { Rich } from "@/components/rich";
+import { useI18n } from "@/i18n/client";
 import { isLowResolution, isPrintable, type StoreConfig, type StoreProduct } from "@/lib/store-types";
 import { useCart } from "./cart";
 import { GalleryPhotoPicker, type PhotoPixels } from "./gallery-photo-picker";
@@ -15,7 +17,7 @@ type Tab = "prints" | "book" | "card";
 type Design = { id: string; name: string; subtitle: string; previewUrl: string | null };
 
 /** Abre el editor de WHCC (photobook o tarjeta) y lleva al cliente allí. */
-async function openEditor(body: Record<string, unknown>): Promise<string | null> {
+async function openEditor(body: Record<string, unknown>, fallbackError: string): Promise<string | null> {
   const res = await fetch("/api/store/editor", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -26,7 +28,7 @@ async function openEditor(body: Record<string, unknown>): Promise<string | null>
     window.location.href = data.url;
     return null;
   }
-  return data.error ?? "No se pudo abrir el editor.";
+  return data.error ?? fallbackError;
 }
 
 function fromPrice(list: StoreProduct[]) {
@@ -41,6 +43,8 @@ function fromPrice(list: StoreProduct[]) {
  */
 export function StoreSheet({ store, media, onClose }: { store: StoreConfig; media: FeedMedia[]; onClose: () => void }) {
   const cart = useCart(store.projectId);
+  const { t } = useI18n();
+  const s = t.store;
   const photos = useMemo(() => media.filter((m) => isPrintable(m)), [media]);
   // Paso "elige tus fotos" antes de abrir el editor (libro o tarjeta).
   const [pick, setPick] = useState<{ productId: string; designId?: string; title: string } | null>(null);
@@ -49,9 +53,9 @@ export function StoreSheet({ store, media, onClose }: { store: StoreConfig; medi
   const cards = store.products.filter((p) => p.kind === "card");
   const tabs = (
     [
-      ["prints", "Impresiones y canvas", photoProducts.length > 0],
-      ["book", KIND_LABEL.book, books.length > 0],
-      ["card", KIND_LABEL.card, cards.length > 0],
+      ["prints", s.tabPrints, photoProducts.length > 0],
+      ["book", t.labels.kind.book, books.length > 0],
+      ["card", t.labels.kind.card, cards.length > 0],
     ] as [Tab, string, boolean][]
   ).filter(([, , show]) => show);
   const [tab, setTab] = useState<Tab>(tabs[0]?.[0] ?? "prints");
@@ -72,7 +76,7 @@ export function StoreSheet({ store, media, onClose }: { store: StoreConfig; medi
   const start = async (body: Record<string, unknown>) => {
     setBusy(true);
     setError(null);
-    const err = await openEditor({ projectId: store.projectId, ...body });
+    const err = await openEditor({ projectId: store.projectId, ...body }, s.openEditorFailed);
     if (err) {
       setError(err);
       setBusy(false);
@@ -80,18 +84,18 @@ export function StoreSheet({ store, media, onClose }: { store: StoreConfig; medi
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 sm:items-center sm:p-6" role="dialog" aria-modal aria-label="Tienda">
-      <button type="button" className="absolute inset-0 cursor-default" aria-label="Cerrar" onClick={onClose} />
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 sm:items-center sm:p-6" role="dialog" aria-modal aria-label={s.store}>
+      <button type="button" className="absolute inset-0 cursor-default" aria-label={s.close} onClick={onClose} />
       <div className="relative flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl bg-white text-neutral-900 sm:rounded-3xl">
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-neutral-100 px-5 py-4">
-          <p className="font-semibold">Tienda</p>
+          <p className="font-semibold">{s.store}</p>
           <div className="flex items-center gap-3">
             {cart.count > 0 ? (
               <a href={store.cartHref} className="rounded-full bg-neutral-900 px-4 py-1.5 text-xs font-semibold text-white">
-                Carrito ({cart.count})
+                {s.cart(cart.count)}
               </a>
             ) : null}
-            <button type="button" onClick={onClose} className="text-2xl leading-none text-neutral-400 hover:text-neutral-900" aria-label="Cerrar">
+            <button type="button" onClick={onClose} className="text-2xl leading-none text-neutral-400 hover:text-neutral-900" aria-label={s.close}>
               ×
             </button>
           </div>
@@ -159,6 +163,7 @@ function PrintsTab({
   cartHref: string;
 }) {
   const cart = useCart(projectId);
+  const s = useI18n().t.store;
   const groups = useMemo(() => {
     const m = new Map<string, StoreProduct[]>();
     for (const p of products) m.set(p.productRef, [...(m.get(p.productRef) ?? []), p]);
@@ -207,7 +212,8 @@ function PrintsTab({
             >
               <span className="block font-medium">{list[0].productName}</span>
               <span className="text-xs text-neutral-500">
-                {list[0].description ? `${list[0].description} ` : ""}Desde {formatUsd(fromPrice(list))}
+                {list[0].description ? `${list[0].description} ` : ""}
+                {s.from(formatUsd(fromPrice(list)))}
               </span>
             </button>
           ))}
@@ -215,7 +221,7 @@ function PrintsTab({
       ) : null}
 
       <div>
-        <p className="mb-2 text-xs font-semibold tracking-wide text-neutral-500 uppercase">1. Tamaño (pulgadas)</p>
+        <p className="mb-2 text-xs font-semibold tracking-wide text-neutral-500 uppercase">{s.sizeStep}</p>
         <div className="flex flex-wrap gap-2">
           {sizes.map((s) => (
             <button
@@ -232,30 +238,28 @@ function PrintsTab({
       </div>
 
       <div>
-        <p className="mb-2 text-xs font-semibold tracking-wide text-neutral-500 uppercase">2. Elige las fotos de la galería</p>
+        <p className="mb-2 text-xs font-semibold tracking-wide text-neutral-500 uppercase">{s.photosStep}</p>
         <GalleryPhotoPicker photos={photos} selected={selected} onChange={(ids) => { setSelected(ids); setAdded(0); }} warnIds={lowRes} onPixels={onPixels} />
       </div>
 
       <div className="sticky bottom-0 -mx-5 -mb-5 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 bg-white px-5 py-4">
         {added > 0 ? (
           <>
-            <p className="text-sm">
-              {added === 1 ? "1 impresión agregada" : `${added} impresiones agregadas`} al carrito.
-            </p>
+            <p className="text-sm">{s.added(added)}</p>
             <a href={cartHref} className="rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white">
-              Ver carrito
+              {s.viewCart}
             </a>
           </>
         ) : (
           <>
             <div className="flex items-center gap-3">
-              <span className="text-xs text-neutral-500">Copias de cada una</span>
+              <span className="text-xs text-neutral-500">{s.copiesEach}</span>
               <div className="flex items-center rounded-full border border-neutral-200 text-sm">
-                <button type="button" className="h-9 w-9" onClick={() => setQuantity((q) => Math.max(1, q - 1))} aria-label="Menos">
+                <button type="button" className="h-9 w-9" onClick={() => setQuantity((q) => Math.max(1, q - 1))} aria-label={s.less}>
                   −
                 </button>
                 <span className="w-6 text-center tabular-nums">{quantity}</span>
-                <button type="button" className="h-9 w-9" onClick={() => setQuantity((q) => Math.min(100, q + 1))} aria-label="Más">
+                <button type="button" className="h-9 w-9" onClick={() => setQuantity((q) => Math.min(100, q + 1))} aria-label={s.more}>
                   +
                 </button>
               </div>
@@ -266,9 +270,7 @@ function PrintsTab({
               onClick={addAll}
               className="rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
             >
-              {selected.length === 0
-                ? "Elige al menos una foto"
-                : `Agregar ${selected.length} · ${formatUsd(size.priceCents * quantity * selected.length)}`}
+              {selected.length === 0 ? s.pickAtLeastOne : s.addN(selected.length, formatUsd(size.priceCents * quantity * selected.length))}
             </button>
           </>
         )}
@@ -292,16 +294,16 @@ function PhotoStep({
   onContinue: (assetIds: string[]) => void;
 }) {
   const [selected, setSelected] = useState<string[]>(() => photos.slice(0, MAX_EDITOR_PHOTOS).map((p) => p.id));
+  const s = useI18n().t.store;
   return (
     <div className="space-y-4">
       <button type="button" onClick={onBack} className="text-sm text-neutral-500 hover:text-neutral-900">
-        ← Volver
+        {s.back}
       </button>
       <div>
         <p className="font-semibold">{title}</p>
         <p className="mt-1 text-sm text-neutral-600">
-          Elige las fotos de la galería que quieres usar. Solo estas aparecerán en el editor del laboratorio, listas para colocar o para el
-          relleno automático (<em>Autofill</em>).
+          <Rich text={s.photoStepText} />
         </p>
       </div>
       <GalleryPhotoPicker photos={photos} selected={selected} onChange={setSelected} max={MAX_EDITOR_PHOTOS} />
@@ -312,7 +314,7 @@ function PhotoStep({
           onClick={() => onContinue(selected)}
           className="w-full rounded-full bg-neutral-900 px-5 py-3 text-sm font-semibold text-white disabled:opacity-40"
         >
-          {busy ? "Abriendo el editor…" : selected.length === 0 ? "Elige al menos una foto" : `Abrir el editor con ${selected.length} ${selected.length === 1 ? "foto" : "fotos"}`}
+          {busy ? s.openingEditor : selected.length === 0 ? s.pickAtLeastOne : s.openEditorWith(selected.length)}
         </button>
       </div>
     </div>
@@ -326,26 +328,16 @@ function BooksTab({ books, busy, onDesign }: { books: StoreProduct[]; busy: bool
     return [...m.values()];
   }, [books]);
   const [selected, setSelected] = useState<Record<string, string>>({});
+  const s = useI18n().t.store;
   return (
     <div>
-      <p className="text-sm text-neutral-600">
-        Elige el libro y después las fotos de la galería que quieres usar. Lo diseñas en el editor del laboratorio (en inglés) solo con
-        esas fotos.
-      </p>
+      <p className="text-sm text-neutral-600">{s.booksIntro}</p>
       <ol className="mt-3 space-y-1.5 rounded-2xl bg-neutral-50 p-4 text-sm text-neutral-700">
-        <li>
-          <strong>1.</strong> En el editor, pasa de la portada (<em>Cover</em>) a la página <strong>2</strong>.
-        </li>
-        <li>
-          <strong>2.</strong> Toca <strong>Autofill Spreads</strong> para llenar el libro con tus fotos, o <strong>Add Images</strong> para
-          colocarlas una a una.
-        </li>
-        <li>
-          <strong>3.</strong> ¿Quieres una foto en la portada? En <em>Cover</em>, elige <strong>Cover Type → Photo</strong>.
-        </li>
-        <li>
-          <strong>4.</strong> Al terminar, toca <strong>Review</strong> y confirma: volverás aquí con tu libro en el carrito.
-        </li>
+        {s.bookSteps.map((step) => (
+          <li key={step}>
+            <Rich text={step} />
+          </li>
+        ))}
       </ol>
       <div className="mt-4 grid gap-4 md:grid-cols-3">
         {byProduct.map((list) => {
@@ -356,7 +348,7 @@ function BooksTab({ books, busy, onDesign }: { books: StoreProduct[]; busy: bool
               <p className="font-medium">{list[0].productName}</p>
               {list[0].description ? <p className="text-xs text-neutral-500">{list[0].description}</p> : null}
               <label className="mt-3 text-xs font-semibold tracking-wide text-neutral-500 uppercase" htmlFor={`size-${ref}`}>
-                Tamaño (pulgadas)
+                {s.sizeInches}
               </label>
               <select
                 id={`size-${ref}`}
@@ -366,18 +358,18 @@ function BooksTab({ books, busy, onDesign }: { books: StoreProduct[]; busy: bool
               >
                 {list.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.sizeLabel} · desde {formatUsd(p.priceCents)}
+                    {p.sizeLabel} · {s.fromLower(formatUsd(p.priceCents))}
                   </option>
                 ))}
               </select>
-              <p className="mt-3 text-sm text-neutral-500">Desde {formatUsd(current.priceCents)} · el precio final depende de las páginas.</p>
+              <p className="mt-3 text-sm text-neutral-500">{s.bookFrom(formatUsd(current.priceCents))}</p>
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => onDesign(current)}
                 className="mt-auto rounded-full bg-neutral-900 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60 [margin-top:1rem]"
               >
-                Elegir fotos y diseñar
+                {s.pickAndDesign}
               </button>
             </div>
           );
@@ -387,14 +379,6 @@ function BooksTab({ books, busy, onDesign }: { books: StoreProduct[]; busy: bool
   );
 }
 
-const CARD_FORMATS = [
-  { id: "flat", label: "Plana" },
-  { id: "folded", label: "Doblada" },
-] as const;
-const CARD_ORIENTATIONS = [
-  { id: "vertical", label: "Vertical" },
-  { id: "horizontal", label: "Horizontal" },
-] as const;
 
 function CardsTab({
   cards,
@@ -407,6 +391,16 @@ function CardsTab({
   busy: boolean;
   onDesign: (product: StoreProduct, designId: string, designName: string) => void;
 }) {
+  const { t } = useI18n();
+  const s = t.store;
+  const CARD_FORMATS = [
+    { id: "flat", label: s.flat },
+    { id: "folded", label: s.folded },
+  ] as const;
+  const CARD_ORIENTATIONS = [
+    { id: "vertical", label: s.vertical },
+    { id: "horizontal", label: s.horizontal },
+  ] as const;
   const [occasion, setOccasion] = useState(CARD_OCCASIONS[0].tag);
   const [format, setFormat] = useState<"flat" | "folded">("flat");
   const [orientation, setOrientation] = useState<"vertical" | "horizontal">("vertical");
@@ -428,14 +422,14 @@ function CardsTab({
       if (next) qs.set("cursor", next);
       const res = await fetch(`/api/store/designs?${qs}`);
       const data = (await res.json().catch(() => ({}))) as { designs?: Design[]; nextCursor?: string | null; error?: string };
-      if (!res.ok || !data.designs) setLoadError(data.error ?? "No se pudieron cargar los diseños.");
+      if (!res.ok || !data.designs) setLoadError(data.error ?? s.designsFailed);
       else {
         setDesigns((d) => (next ? [...d, ...data.designs!] : data.designs!));
         setCursor(data.nextCursor ?? null);
       }
       setLoading(false);
     },
-    [product, projectId, occasion],
+    [product, projectId, occasion, s.designsFailed],
   );
 
   useEffect(() => {
@@ -448,14 +442,12 @@ function CardsTab({
   return (
     <div>
       <p className="text-sm text-neutral-600">
-        Elige un diseño y personalízalo con tus fotos y tu texto. {product.sizeLabel}, con sobre. Mínimo {product.minQuantity} tarjetas, desde{" "}
-        {formatUsd(product.priceCents)} c/u. Después eliges las fotos de la galería; en el editor toca el espacio de la foto o{" "}
-        <strong>Add Images</strong> para colocarlas, y <strong>Review</strong> al terminar.
+        <Rich text={s.cardsIntro(product.sizeLabel, product.minQuantity, formatUsd(product.priceCents))} />
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
         {CARD_OCCASIONS.map((o) => (
           <Chip key={o.tag} active={o.tag === occasion} onClick={() => setOccasion(o.tag)}>
-            {o.label}
+            {t.labels.occasions[o.tag] ?? o.label}
           </Chip>
         ))}
       </div>
@@ -487,15 +479,15 @@ function CardsTab({
           </button>
         ))}
       </div>
-      {loading ? <p className="mt-4 text-center text-sm text-neutral-500">Cargando diseños…</p> : null}
+      {loading ? <p className="mt-4 text-center text-sm text-neutral-500">{s.loadingDesigns}</p> : null}
       {!loading && cursor ? (
         <div className="mt-4 text-center">
           <button type="button" onClick={() => load(cursor)} className="rounded-full border border-neutral-300 px-5 py-2 text-sm">
-            Ver más diseños
+            {s.moreDesigns}
           </button>
         </div>
       ) : null}
-      {busy ? <p className="mt-4 text-center text-sm text-neutral-500">Abriendo el editor…</p> : null}
+      {busy ? <p className="mt-4 text-center text-sm text-neutral-500">{s.openingEditor}</p> : null}
     </div>
   );
 }

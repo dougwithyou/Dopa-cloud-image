@@ -5,11 +5,17 @@ import { SubmitButton } from "@/components/submit-button";
 import { canUpload } from "@/lib/subscription";
 import { CreateClientForm } from "../forms";
 import { deleteClient, resendAccess } from "../actions";
+import { getI18n } from "@/i18n/server";
 
-export const metadata = { title: "Clientes" };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.account.clients.meta };
+}
 
 export default async function ClientsPage() {
   const { supabase, creator } = await requireCreator();
+  const { t, locale } = await getI18n();
+  const c = t.account.clients;
   const { data: clients } = await supabase
     .from("clients")
     .select("id, name, email, user_id, invited_at, accepted_at, created_at, projects(count)")
@@ -18,30 +24,30 @@ export default async function ClientsPage() {
   const count = clients?.length ?? 0;
   const atLimit = creator.client_limit !== null && count >= creator.client_limit;
   const disabledReason = !canUpload(creator)
-    ? "Tu suscripción no está activa: no puedes agregar clientes nuevos."
+    ? c.inactive
     : atLimit
-      ? `Tu plan permite ${creator.client_limit} clientes. Cambia de plan en Configuración para agregar más.`
+      ? c.atLimit(creator.client_limit ?? 0)
       : undefined;
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="dash-title">
-          Clientes<sup>({count})</sup>
+          {c.title}<sup>({count})</sup>
         </h1>
         <p className="mt-2 text-neutral-500">
-          {count} {creator.client_limit === null ? "clientes (ilimitados)" : `de ${creator.client_limit} clientes`}
+          {c.count(count, creator.client_limit)}
         </p>
       </div>
 
       <section className="card p-5">
-        <h2 className="mb-1 font-semibold">Agregar cliente</h2>
+        <h2 className="mb-1 font-semibold">{c.add}</h2>
         <p className="mb-4 text-sm text-neutral-500">
-          Después asígnalo a un{" "}
+          {c.assignA}
           <Link href="/dashboard/projects" className="font-semibold text-neutral-900">
-            proyecto
+            {c.assignLink}
           </Link>
-          . Recibirá su acceso por correo cuando publiques ese proyecto.
+          {c.assignB}
         </p>
         <CreateClientForm disabledReason={disabledReason} />
       </section>
@@ -68,17 +74,17 @@ export default async function ClientsPage() {
                       <p className="mt-1 text-xs text-neutral-500">
                         {client.user_id ? (
                           <span className="badge bg-green-50 text-green-700">
-                            Con acceso desde {formatDate(client.accepted_at)}
+                            {c.hasAccess(formatDate(client.accepted_at, locale))}
                           </span>
                         ) : client.invited_at ? (
                           <span className="badge bg-amber-50 text-amber-700">
-                            Acceso enviado el {formatDate(client.invited_at)}, aún no ha entrado
+                            {c.invited(formatDate(client.invited_at, locale))}
                           </span>
                         ) : (
-                          <span className="badge bg-white text-neutral-700">Sin acceso todavía</span>
+                          <span className="badge bg-white text-neutral-700">{c.noAccess}</span>
                         )}
                         <span className="ml-2">
-                          {projectCount} {projectCount === 1 ? "proyecto" : "proyectos"}
+                          {c.projects(projectCount)}
                         </span>
                       </p>
                     </div>
@@ -87,8 +93,8 @@ export default async function ClientsPage() {
                     {!client.user_id ? (
                       <form action={resendAccess}>
                         <input type="hidden" name="clientId" value={client.id} />
-                        <SubmitButton className="btn-secondary px-3 py-1.5 text-xs" pendingLabel="Enviando…">
-                          {client.invited_at ? "Reenviar acceso" : "Enviar acceso"}
+                        <SubmitButton className="btn-secondary px-3 py-1.5 text-xs" pendingLabel={c.sending}>
+                          {client.invited_at ? c.resend : c.send}
                         </SubmitButton>
                       </form>
                     ) : null}
@@ -96,10 +102,10 @@ export default async function ClientsPage() {
                       <input type="hidden" name="clientId" value={client.id} />
                       <SubmitButton
                         className="btn-danger px-3 py-1.5 text-xs"
-                        pendingLabel="Eliminando…"
-                        confirm={`¿Eliminar a ${client.name}? Sus proyectos y archivos se conservan, pero quedarán sin cliente.`}
+                        pendingLabel={c.deleting}
+                        confirm={c.confirmDelete(client.name)}
                       >
-                        Eliminar
+                        {c.delete}
                       </SubmitButton>
                     </form>
                   </div>
@@ -108,7 +114,7 @@ export default async function ClientsPage() {
             })}
           </ul>
         ) : (
-          <div className="card p-8 text-center text-sm text-neutral-500">Todavía no tienes clientes.</div>
+          <div className="card p-8 text-center text-sm text-neutral-500">{c.empty}</div>
         )}
       </section>
     </div>

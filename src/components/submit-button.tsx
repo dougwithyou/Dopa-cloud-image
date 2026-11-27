@@ -1,6 +1,7 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
+import { useI18n } from "@/i18n/client";
 
 export function SubmitButton({
   children,
@@ -19,6 +20,7 @@ export function SubmitButton({
   confirm?: string;
 }) {
   const { pending } = useFormStatus();
+  const { t } = useI18n();
   return (
     <button
       type="submit"
@@ -30,7 +32,7 @@ export function SubmitButton({
         if (confirm && !window.confirm(confirm)) e.preventDefault();
       }}
     >
-      {pending ? (pendingLabel ?? "Procesando…") : children}
+      {pending ? (pendingLabel ?? t.auth.processing) : children}
     </button>
   );
 }

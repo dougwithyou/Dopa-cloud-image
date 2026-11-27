@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getI18n } from "@/i18n/server";
 
 export type AccessState = { error?: string } | null;
 
@@ -14,21 +15,22 @@ export type AccessState = { error?: string } | null;
  */
 export async function claimAccess(_prev: AccessState, formData: FormData): Promise<AccessState> {
   const { supabase, user } = await requireUser();
+  const a = (await getI18n()).t.auth.access;
   const clientId = z.uuid().safeParse(formData.get("clientId"));
-  if (!clientId.success) return { error: "Enlace de acceso inválido" };
+  if (!clientId.success) return { error: a.errLink };
 
   const password = formData.get("password");
   if (typeof password === "string" && password.length > 0) {
-    if (password.length < 8 || password.length > 72) return { error: "La contraseña debe tener entre 8 y 72 caracteres" };
-    if (password !== formData.get("confirm")) return { error: "Las contraseñas no coinciden" };
+    if (password.length < 8 || password.length > 72) return { error: (await getI18n()).t.auth.errors.passwordRange };
+    if (password !== formData.get("confirm")) return { error: (await getI18n()).t.auth.errors.mismatch };
     const { error } = await supabase.auth.updateUser({ password });
-    if (error) return { error: "No se pudo guardar la contraseña. Pide un nuevo enlace de acceso." };
+    if (error) return { error: a.errSave };
   } else if (formData.get("requirePassword") === "1") {
-    return { error: "Crea una contraseña para continuar" };
+    return { error: a.errNeedPassword };
   }
 
   const email = user.email?.toLowerCase();
-  if (!email) return { error: "Tu cuenta no tiene correo" };
+  if (!email) return { error: a.errNoEmail };
 
   const admin = createAdminClient();
   const { data: client } = await admin
@@ -37,8 +39,8 @@ export async function claimAccess(_prev: AccessState, formData: FormData): Promi
     .eq("id", clientId.data)
     .maybeSingle();
 
-  if (!client || client.email !== email) return { error: "Este enlace no corresponde a tu cuenta" };
-  if (client.user_id && client.user_id !== user.id) return { error: "Este acceso ya lo usa otra cuenta" };
+  if (!client || client.email !== email) return { error: a.errNotYours };
+  if (client.user_id && client.user_id !== user.id) return { error: a.errTaken };
 
   if (!client.user_id) {
     const { error } = await admin
@@ -46,7 +48,7 @@ export async function claimAccess(_prev: AccessState, formData: FormData): Promi
       .update({ user_id: user.id, accepted_at: new Date().toISOString() })
       .eq("id", client.id)
       .is("user_id", null);
-    if (error) return { error: "No se pudo activar tu acceso" };
+    if (error) return { error: a.errActivate };
   }
 
   redirect("/portal");

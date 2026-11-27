@@ -2,10 +2,14 @@ import Link from "next/link";
 import { requireCreator } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
 import { formatUsd } from "@/lib/print-pricing";
-import { ORDER_STATUS_LABEL } from "@/lib/store-types";
 import { ArrowRightIcon } from "@/components/icons";
+import { localizeSizeLabel } from "@/i18n/products";
+import { getI18n } from "@/i18n/server";
 
-export const metadata = { title: "Ventas" };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.account.orders.meta };
+}
 
 const STATUS_TONE: Record<string, string> = {
   paid: "bg-dash-yellow-soft",
@@ -19,6 +23,8 @@ const STATUS_TONE: Record<string, string> = {
 
 export default async function OrdersPage() {
   const { supabase } = await requireCreator();
+  const { t, locale } = await getI18n();
+  const o_ = t.account.orders;
   const { data: orders } = await supabase
     .from("print_orders")
     .select("id, reference, status, buyer_name, buyer_email, total_cents, creator_earnings_cents, stripe_transfer_id, tracking, failure_reason, created_at, projects(title), print_order_items(product_name, size_label, quantity)")
@@ -36,18 +42,18 @@ export default async function OrdersPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h1 className="dash-title">
-          Ventas<sup>({live.length})</sup>
+          {o_.title}<sup>({live.length})</sup>
         </h1>
         <Link href="/dashboard/store" className="btn-secondary py-3">
-          Tienda y precios <ArrowRightIcon className="h-4 w-4" />
+          {o_.storeAndPrices} <ArrowRightIcon className="h-4 w-4" />
         </Link>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
         {[
-          { label: "Vendido", value: formatUsd(sales), tone: "bg-white" },
-          { label: "Tus ganancias", value: formatUsd(earned), tone: "bg-dash-yellow" },
-          { label: "Ya transferido", value: formatUsd(paidOut), tone: "bg-dash-blue text-white" },
+          { label: o_.sold, value: formatUsd(sales), tone: "bg-white" },
+          { label: o_.earnings, value: formatUsd(earned), tone: "bg-dash-yellow" },
+          { label: o_.paidOut, value: formatUsd(paidOut), tone: "bg-dash-blue text-white" },
         ].map((s) => (
           <div key={s.label} className={`rounded-[26px] p-6 ${s.tone}`}>
             <p className="text-sm opacity-70">{s.label}</p>
@@ -55,11 +61,11 @@ export default async function OrdersPage() {
           </div>
         ))}
       </div>
-      <p className="text-xs text-neutral-500">Tu ganancia se transfiere a tu cuenta de Stripe cuando el laboratorio envía el pedido.</p>
+      <p className="text-xs text-neutral-500">{o_.payoutNote}</p>
 
       {list.length === 0 ? (
         <div className="card p-8 text-center text-sm text-neutral-500">
-          Todavía no hay ventas. Activa la tienda en una galería de fotos para que tus clientes puedan comprar impresiones.
+          {o_.empty}
         </div>
       ) : (
         <ul className="space-y-3">
@@ -71,26 +77,26 @@ export default async function OrdersPage() {
                     {o.buyer_name} <span className="text-sm font-normal text-neutral-500">· {o.reference}</span>
                   </p>
                   <p className="truncate text-sm text-neutral-500">
-                    {o.projects?.title ?? "Galería eliminada"} · {formatDate(o.created_at)}
+                    {o.projects?.title ?? o_.deletedGallery} · {formatDate(o.created_at, locale)}
                   </p>
                 </div>
-                <span className={`badge ${STATUS_TONE[o.status] ?? "bg-neutral-100"}`}>{ORDER_STATUS_LABEL[o.status]}</span>
+                <span className={`badge ${STATUS_TONE[o.status] ?? "bg-neutral-100"}`}>{t.labels.orderStatus[o.status]}</span>
               </div>
               <p className="mt-3 text-sm">
-                {o.print_order_items.map((i) => `${i.quantity}× ${i.product_name} ${i.size_label}`).join(" · ")}
+                {o.print_order_items.map((i) => `${i.quantity}× ${i.product_name} ${localizeSizeLabel(i.size_label, t)}`).join(" · ")}
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
                 <span>
-                  Total <strong>{formatUsd(o.total_cents)}</strong>
+                  {o_.total} <strong>{formatUsd(o.total_cents)}</strong>
                 </span>
                 <span className="text-green-700">
-                  Tu ganancia <strong>{formatUsd(o.creator_earnings_cents)}</strong>
-                  {o.stripe_transfer_id ? " · transferida" : ""}
+                  {o_.yourEarnings} <strong>{formatUsd(o.creator_earnings_cents)}</strong>
+                  {o.stripe_transfer_id ? o_.transferred : ""}
                 </span>
-                {o.tracking.map((t, i) =>
-                  t.trackingUrl ? (
-                    <a key={i} href={t.trackingUrl} target="_blank" rel="noreferrer" className="underline">
-                      Seguimiento {t.carrier ?? ""}
+                {o.tracking.map((tr, i) =>
+                  tr.trackingUrl ? (
+                    <a key={i} href={tr.trackingUrl} target="_blank" rel="noreferrer" className="underline">
+                      {o_.tracking} {tr.carrier ?? ""}
                     </a>
                   ) : null,
                 )}

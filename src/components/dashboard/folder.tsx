@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ProjectThumb } from "@/components/project-thumb";
-import { PROJECT_STATUS_LABEL, PROJECT_TYPE_LABEL } from "@/lib/format";
+import { getI18n } from "@/i18n/server";
 import type { ProjectSummary } from "@/lib/project-covers";
 
 type ProjectType = "photo_session" | "monthly_content";
@@ -49,10 +49,11 @@ export function Folder({
 }
 
 /** Estado en la pestaña: píldora blanca y un indicador como en la referencia. */
-export function StatusTab({ status }: { status: ProjectStatus }) {
+export async function StatusTab({ status }: { status: ProjectStatus }) {
+  const { t } = await getI18n();
   return (
     <>
-      <span className="rounded-full bg-white px-3 py-1 text-xs font-medium whitespace-nowrap">{PROJECT_STATUS_LABEL[status]}</span>
+      <span className="rounded-full bg-white px-3 py-1 text-xs font-medium whitespace-nowrap">{t.labels.projectStatus[status]}</span>
       <StatusRing status={status} />
     </>
   );
@@ -84,12 +85,14 @@ function StatusRing({ status }: { status: ProjectStatus }) {
   );
 }
 
-export function contentSummary(type: ProjectType, postCount: number, summary?: ProjectSummary) {
-  if (type === "monthly_content") return `${postCount} ${postCount === 1 ? "publicación" : "publicaciones"}`;
+type DashText = { posts: (n: number) => string; photos: (n: number) => string; videos: (n: number) => string };
+
+export function contentSummary(d: DashText, type: ProjectType, postCount: number, summary?: ProjectSummary) {
+  if (type === "monthly_content") return d.posts(postCount);
   const photos = summary?.photos ?? 0;
   const videos = summary?.videos ?? 0;
-  const parts = [`${photos} ${photos === 1 ? "foto" : "fotos"}`];
-  if (videos > 0) parts.push(`${videos} ${videos === 1 ? "video" : "videos"}`);
+  const parts = [d.photos(photos)];
+  if (videos > 0) parts.push(d.videos(videos));
   return parts.join(" · ");
 }
 
@@ -103,7 +106,7 @@ export interface FolderProject {
 }
 
 /** Proyecto como carpeta: título, plantilla, cliente y la foto de portada. */
-export function ProjectFolder({
+export async function ProjectFolder({
   project,
   summary,
   className = "",
@@ -112,6 +115,7 @@ export function ProjectFolder({
   summary?: ProjectSummary;
   className?: string;
 }) {
+  const { t } = await getI18n();
   return (
     <Link
       href={`/dashboard/projects/${project.id}`}
@@ -121,7 +125,7 @@ export function ProjectFolder({
         <div className="flex h-full flex-col px-5 pt-3 pb-5">
           <h3 className="line-clamp-2 text-[1.35rem] leading-[1.15] font-semibold tracking-[-0.02em]">{project.title}</h3>
           <p className="mt-1 text-sm text-black/60">
-            {PROJECT_TYPE_LABEL[project.type]} · {contentSummary(project.type, project.postCount, summary)}
+            {t.labels.projectType[project.type]} · {contentSummary(t.dash, project.type, project.postCount, summary)}
           </p>
           <div className="mt-auto pt-4">
             <div className="folder-dots" />
@@ -131,7 +135,7 @@ export function ProjectFolder({
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold">
                 {project.clientName ? project.clientName.slice(0, 1).toUpperCase() : "?"}
               </span>
-              <span className={`truncate ${project.clientName ? "" : "text-black/55"}`}>{project.clientName ?? "Sin cliente"}</span>
+              <span className={`truncate ${project.clientName ? "" : "text-black/55"}`}>{project.clientName ?? t.dash.noClient}</span>
             </span>
             {summary?.cover ? (
               <ProjectThumb

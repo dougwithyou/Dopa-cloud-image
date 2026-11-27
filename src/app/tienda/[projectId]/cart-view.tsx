@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useCart } from "@/components/store/cart";
+import { useI18n } from "@/i18n/client";
 import { formatUsd } from "@/lib/print-pricing";
 import { normalizeQuantity } from "@/lib/print-offerings";
 import { US_STATES, lineKey, type CartLine, type StoreProduct } from "@/lib/store-types";
@@ -28,6 +29,7 @@ export function CartView({
   buyer: { name: string; email: string } | null;
 }) {
   const cart = useCart(projectId);
+  const s = useI18n().t.store;
   const productById = new Map(products.map((p) => [p.id, p]));
   const photoById = new Map(photos.map((p) => [p.id, p]));
   type Row = { key: string; line: CartLine; product: StoreProduct; photo: Photo | null; unitCents: number };
@@ -64,7 +66,7 @@ export function CartView({
     if (data.url) window.location.href = data.url;
     else {
       setEditing(null);
-      setError(data.error ?? "No se pudo abrir el editor.");
+      setError(data.error ?? s.openEditorFailed);
     }
   }
 
@@ -106,7 +108,7 @@ export function CartView({
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-      if (!res.ok || !data.url) throw new Error(data.error ?? "No se pudo iniciar el pago.");
+      if (!res.ok || !data.url) throw new Error(data.error ?? s.checkoutFailed);
       window.location.href = data.url;
     } catch (e) {
       setError((e as Error).message);
@@ -117,12 +119,12 @@ export function CartView({
   if (lines.length === 0) {
     return (
       <div className="mx-auto max-w-md px-4 py-20 text-center">
-        <h1 className="text-2xl font-semibold">Tu carrito está vacío</h1>
+        <h1 className="text-2xl font-semibold">{s.emptyTitle}</h1>
         <p className="mt-2 text-sm text-neutral-500">
-          Abre una foto y elige “Comprar impresión”, o entra a “Tienda” en la galería para photobooks y tarjetas.
+          {s.emptyText}
         </p>
         <a href={galleryHref} className="mt-6 inline-block rounded-full bg-neutral-900 px-6 py-3 text-sm font-semibold text-white">
-          Ir a la galería
+          {s.goGallery}
         </a>
       </div>
     );
@@ -131,11 +133,11 @@ export function CartView({
   return (
     <div className="mx-auto grid max-w-5xl gap-8 px-4 py-8 lg:grid-cols-[1.3fr_1fr]">
       <section>
-        <h1 className="text-2xl font-semibold">Tu carrito</h1>
+        <h1 className="text-2xl font-semibold">{s.yourCart}</h1>
         <p className="text-sm text-neutral-500">{galleryTitle}</p>
         {missing > 0 ? (
           <p className="mt-3 rounded-xl bg-amber-50 px-4 py-2 text-sm text-amber-800">
-            Quitamos {missing} {missing === 1 ? "producto que ya no está disponible" : "productos que ya no están disponibles"}.
+            {s.removedMissing(missing)}
           </p>
         ) : null}
         <ul className="mt-5 divide-y divide-neutral-200 rounded-2xl border border-neutral-200 bg-white">
@@ -151,7 +153,7 @@ export function CartView({
                 />
               ) : (
                 <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-[10px] text-neutral-400 uppercase">
-                  {x.product.kind === "card" ? "Tarjeta" : "Libro"}
+                  {x.product.kind === "card" ? s.card : s.book}
                 </span>
               )}
               <div className="min-w-0 flex-1">
@@ -159,15 +161,15 @@ export function CartView({
                   {x.product.productName} · {x.product.sizeLabel}
                 </p>
                 <p className="truncate text-xs text-neutral-500">
-                  {x.photo ? x.photo.fileName : x.product.kind === "card" ? `${formatUsd(x.unitCents)} c/u · mínimo ${x.product.minQuantity}` : "Tu diseño"}
+                  {x.photo ? x.photo.fileName : x.product.kind === "card" ? s.eachMin(formatUsd(x.unitCents), x.product.minQuantity) : s.yourDesign}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   <div className="flex items-center rounded-full border border-neutral-200 text-sm">
-                    <button type="button" className="h-8 w-8" onClick={() => step(x, -1)} aria-label="Menos">
+                    <button type="button" className="h-8 w-8" onClick={() => step(x, -1)} aria-label={s.less}>
                       −
                     </button>
                     <span className="min-w-6 px-1 text-center tabular-nums">{x.line.quantity}</span>
-                    <button type="button" className="h-8 w-8" onClick={() => step(x, 1)} aria-label="Más">
+                    <button type="button" className="h-8 w-8" onClick={() => step(x, 1)} aria-label={s.more}>
                       +
                     </button>
                   </div>
@@ -178,11 +180,11 @@ export function CartView({
                       className="text-xs font-medium underline disabled:opacity-50"
                       onClick={() => editDesign(x.line.editorItemId!)}
                     >
-                      {editing === x.line.editorItemId ? "Abriendo…" : "Editar diseño"}
+                      {editing === x.line.editorItemId ? s.opening : s.editDesign}
                     </button>
                   ) : null}
                   <button type="button" className="text-xs text-neutral-500 underline" onClick={() => cart.remove(x.key)}>
-                    Quitar
+                    {s.remove}
                   </button>
                 </div>
               </div>
@@ -192,52 +194,51 @@ export function CartView({
         </ul>
         <dl className="mt-5 space-y-1 text-sm">
           <div className="flex justify-between">
-            <dt className="text-neutral-500">Subtotal</dt>
+            <dt className="text-neutral-500">{s.subtotal}</dt>
             <dd className="tabular-nums">{formatUsd(subtotal)}</dd>
           </div>
           <div className="flex justify-between">
             <dt className="text-neutral-500">
-              Envío económico{groups > 1 ? ` (${groups} paquetes)` : ""}
-              {hasDesigns ? " · estimado" : ""}
+              {s.shipping(groups, hasDesigns)}
             </dt>
             <dd className="tabular-nums">{formatUsd(shipping)}</dd>
           </div>
           {taxAtCheckout ? (
             <div className="flex justify-between text-neutral-500">
-              <dt>Impuestos</dt>
-              <dd>Se calculan al pagar</dd>
+              <dt>{s.taxes}</dt>
+              <dd>{s.taxesAtCheckout}</dd>
             </div>
           ) : null}
           <div className="flex justify-between border-t border-neutral-200 pt-2 text-base font-semibold">
-            <dt>Total</dt>
+            <dt>{s.total}</dt>
             <dd className="tabular-nums">{formatUsd(subtotal + shipping)}</dd>
           </div>
         </dl>
         {groups > 1 ? (
-          <p className="mt-2 text-xs text-neutral-500">Cada tipo de producto se produce y se envía en su propio paquete.</p>
+          <p className="mt-2 text-xs text-neutral-500">{s.ownPackage}</p>
         ) : null}
         {hasDesigns ? (
-          <p className="mt-1 text-xs text-neutral-500">El precio final de photobooks y tarjetas se confirma al pagar, según tu diseño.</p>
+          <p className="mt-1 text-xs text-neutral-500">{s.designPriceNote}</p>
         ) : null}
       </section>
 
       <section>
         <form action={checkout} className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-5">
-          <h2 className="text-lg font-semibold">Envío</h2>
-          <p className="-mt-2 text-xs text-neutral-500">Solo enviamos a los 48 estados contiguos de EE.UU. y DC.</p>
-          <Field label="Nombre completo" name="name" defaultValue={buyer?.name} autoComplete="name" required />
-          <Field label="Correo" name="email" type="email" defaultValue={buyer?.email} autoComplete="email" required />
-          <Field label="Dirección" name="addr1" autoComplete="address-line1" required />
-          <Field label="Apartamento, suite (opcional)" name="addr2" autoComplete="address-line2" />
+          <h2 className="text-lg font-semibold">{s.shippingTitle}</h2>
+          <p className="-mt-2 text-xs text-neutral-500">{s.shippingArea}</p>
+          <Field label={s.fullName} name="name" defaultValue={buyer?.name} autoComplete="name" required />
+          <Field label={s.email} name="email" type="email" defaultValue={buyer?.email} autoComplete="email" required />
+          <Field label={s.address} name="addr1" autoComplete="address-line1" required />
+          <Field label={s.address2} name="addr2" autoComplete="address-line2" />
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Ciudad" name="city" autoComplete="address-level2" required />
-            <Field label="Código postal" name="zip" autoComplete="postal-code" inputMode="numeric" pattern="\d{5}(-\d{4})?" required />
+            <Field label={s.city} name="city" autoComplete="address-level2" required />
+            <Field label={s.zip} name="zip" autoComplete="postal-code" inputMode="numeric" pattern="\d{5}(-\d{4})?" required />
           </div>
           <label className="block text-sm">
-            <span className="mb-1 block font-medium text-neutral-700">Estado</span>
+            <span className="mb-1 block font-medium text-neutral-700">{s.state}</span>
             <select name="state" required defaultValue="" autoComplete="address-level1" className="block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm">
               <option value="" disabled>
-                Elige un estado
+                {s.pickState}
               </option>
               {US_STATES.map(([code, name]) => (
                 <option key={code} value={code}>
@@ -248,9 +249,9 @@ export function CartView({
           </label>
           {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
           <button type="submit" disabled={pending} className="w-full rounded-full bg-neutral-900 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">
-            {pending ? "Abriendo el pago…" : `Pagar ${formatUsd(subtotal + shipping)}${taxAtCheckout ? " + impuestos" : ""}`}
+            {pending ? s.openingCheckout : s.pay(formatUsd(subtotal + shipping), taxAtCheckout)}
           </button>
-          <p className="text-center text-xs text-neutral-500">Pago seguro con Stripe. Impreso por un laboratorio profesional.</p>
+          <p className="text-center text-xs text-neutral-500">{s.secure}</p>
         </form>
       </section>
     </div>

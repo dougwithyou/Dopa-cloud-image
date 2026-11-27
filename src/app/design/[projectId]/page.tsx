@@ -5,8 +5,12 @@ import { formatDate } from "@/lib/format";
 import { parseDesign } from "@/lib/gallery-design";
 import { sceneTitle } from "@/components/templates/project-view";
 import { GalleryEditor } from "./editor";
+import { getI18n } from "@/i18n/server";
 
-export const metadata = { title: "Diseño de la galería" };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.design.meta };
+}
 
 /** Editor de diseño de la plantilla Galería de fotos, con vista previa en vivo. */
 export default async function DesignPage({ params }: { params: Promise<{ projectId: string }> }) {
@@ -23,15 +27,16 @@ export default async function DesignPage({ params }: { params: Promise<{ project
   if (project.type !== "photo_session") redirect(`/dashboard/projects/${project.id}`);
 
   const content = await loadProjectContent(supabase, project.id);
+  const { t, locale } = await getI18n();
 
   return (
     <GalleryEditor
       projectId={project.id}
       title={project.title}
       authorName={creator.business_name}
-      date={formatDate(project.created_at)}
+      date={formatDate(project.created_at, locale)}
       items={content.library}
-      scenes={content.posts.map((p, i) => ({ id: p.id, title: sceneTitle(p.caption, i), media: p.media }))}
+      scenes={content.posts.map((p, i) => ({ id: p.id, title: sceneTitle(p.caption, i, t.gallery.scene), media: p.media }))}
       initialDesign={parseDesign(project.design)}
     />
   );

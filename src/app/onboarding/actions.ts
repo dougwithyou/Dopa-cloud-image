@@ -7,17 +7,20 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createCheckoutSession } from "@/lib/billing";
 import { PLAN_IDS } from "@/lib/plans";
 import { hasSubscription } from "@/lib/subscription";
+import { getI18n } from "@/i18n/server";
 
 export type OnboardingState = { error?: string } | null;
 
-const Schema = z.object({
-  businessName: z.string().trim().min(1, "Ingresa el nombre de tu negocio").max(120),
-  plan: z.enum(PLAN_IDS, { error: "Elige un plan" }),
-});
 
 /** Guarda el nombre del negocio y envía al creador a Stripe Checkout. */
 export async function startTrial(_prev: OnboardingState, formData: FormData): Promise<OnboardingState> {
   const { supabase, user } = await requireUser("/onboarding");
+  const { t, locale } = await getI18n();
+  const o = t.auth.onboarding;
+  const Schema = z.object({
+    businessName: z.string().trim().min(1, o.errBusiness).max(120),
+    plan: z.enum(PLAN_IDS, { error: o.errPlan }),
+  });
   const parsed = Schema.safeParse({ businessName: formData.get("businessName"), plan: formData.get("plan") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
@@ -30,19 +33,19 @@ export async function startTrial(_prev: OnboardingState, formData: FormData): Pr
   if (!creator) {
     const { data, error } = await admin
       .from("creators")
-      .insert({ user_id: user.id, business_name: parsed.data.businessName, plan: parsed.data.plan })
+      .insert({ user_id: user.id, business_name: parsed.data.businessName, plan: parsed.data.plan, locale })
       .select("*")
       .single();
-    if (error) return { error: "No se pudo crear tu cuenta de creador" };
+    if (error) return { error: o.errCreate };
     creator = data;
   } else {
     const { data, error } = await admin
       .from("creators")
-      .update({ business_name: parsed.data.businessName, plan: parsed.data.plan })
+      .update({ business_name: parsed.data.businessName, plan: parsed.data.plan, locale })
       .eq("id", creator.id)
       .select("*")
       .single();
-    if (error) return { error: "No se pudo actualizar tu cuenta" };
+    if (error) return { error: o.errUpdate };
     creator = data;
   }
 
@@ -51,7 +54,7 @@ export async function startTrial(_prev: OnboardingState, formData: FormData): Pr
     url = await createCheckoutSession(creator, parsed.data.plan, user.email);
   } catch (err) {
     console.error("[onboarding] checkout", err);
-    return { error: "No se pudo abrir el pago. Inténtalo de nuevo." };
+    return { error: o.errCheckout };
   }
   redirect(url);
 }

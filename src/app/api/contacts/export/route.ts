@@ -1,3 +1,4 @@
+import { getI18n } from "@/i18n/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { getCreatorContext } from "@/lib/auth";
 
@@ -16,8 +17,9 @@ function csvCell(value: unknown): string {
  * ?consent=1 exporta solo quienes aceptaron recibir correos de marketing.
  */
 export async function GET(req: NextRequest) {
+  const a = (await getI18n()).t.api;
   const ctx = await getCreatorContext();
-  if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  if (!ctx) return NextResponse.json({ error: a.notAuthenticated }, { status: 401 });
 
   let query = ctx.supabase
     .from("gallery_leads")
@@ -27,15 +29,15 @@ export async function GET(req: NextRequest) {
   const onlyConsent = req.nextUrl.searchParams.get("consent") === "1";
   if (onlyConsent) query = query.eq("marketing_consent", true);
   const { data, error } = await query;
-  if (error) return NextResponse.json({ error: "No se pudo exportar" }, { status: 500 });
+  if (error) return NextResponse.json({ error: a.exportFailed }, { status: 500 });
 
-  const header = ["Nombre", "Apellido", "Email", "Acepta marketing", "Fecha consentimiento", "Galería", "Visitas", "Primer registro", "Última visita"];
+  const header = a.csvHeader;
   const rows = (data ?? []).map((l) =>
     [
       l.first_name,
       l.last_name,
       l.email,
-      l.marketing_consent ? "sí" : "no",
+      l.marketing_consent ? a.yes : a.no,
       l.consent_at ?? "",
       l.projects?.title ?? "",
       l.visits,

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { getI18n } from "@/i18n/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { appUrl } from "@/lib/env";
@@ -32,12 +33,13 @@ const Body = z.union([
  * Devuelve la URL del editor (es una credencial: no se guarda).
  */
 export async function POST(req: NextRequest) {
+  const a = (await getI18n()).t.api;
   const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: a.invalidData }, { status: 400 });
   const body = parsed.data;
 
   const access = await getStoreAccess(body.projectId);
-  if (!access) return NextResponse.json({ error: "La tienda de esta galería no está disponible." }, { status: 403 });
+  if (!access) return NextResponse.json({ error: a.storeUnavailable }, { status: 403 });
   const admin = createAdminClient();
   const token = randomBytes(18).toString("base64url");
 
@@ -51,7 +53,7 @@ export async function POST(req: NextRequest) {
       .eq("id", body.editorItemId)
       .eq("project_id", body.projectId)
       .maybeSingle();
-    if (!item) return NextResponse.json({ error: "Diseño no encontrado." }, { status: 404 });
+    if (!item) return NextResponse.json({ error: a.designNotFound }, { status: 404 });
     await admin.from("print_editor_items").update({ return_token: token, finished: false }).eq("id", item.id);
     editorItemId = item.id;
     configuredProductId = item.configured_product_id;
@@ -59,8 +61,8 @@ export async function POST(req: NextRequest) {
     const product = (await loadStoreProducts(admin, access.creator)).find(
       (p) => p.id === body.productId && p.completion === "editor",
     );
-    if (!product) return NextResponse.json({ error: "Producto no disponible." }, { status: 404 });
-    if (product.kind === "card" && !body.designId) return NextResponse.json({ error: "Elige un diseño." }, { status: 400 });
+    if (!product) return NextResponse.json({ error: a.productUnavailable }, { status: 404 });
+    if (product.kind === "card" && !body.designId) return NextResponse.json({ error: a.pickDesign }, { status: 400 });
 
     let query = admin
       .from("assets")
@@ -77,7 +79,7 @@ export async function POST(req: NextRequest) {
       photos = photos.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
     }
     photos = photos.slice(0, MAX_EDITOR_PHOTOS);
-    if (photos.length === 0) return NextResponse.json({ error: "Elige al menos una foto de la galería." }, { status: 400 });
+    if (photos.length === 0) return NextResponse.json({ error: a.pickPhoto }, { status: 400 });
     const imageUrls = await Promise.all(photos.map((a) => signDownloadUrl(a.r2_key, { expiresIn: LAB_IMAGE_TTL_SECONDS })));
 
     const selections: Record<string, string | number> =
@@ -92,7 +94,7 @@ export async function POST(req: NextRequest) {
       configuredProductId = created.configuredProductId;
     } catch (err) {
       console.error("[store] No se pudo crear el diseño", err);
-      return NextResponse.json({ error: "No se pudo abrir el editor. Inténtalo de nuevo." }, { status: 502 });
+      return NextResponse.json({ error: a.editorFailed }, { status: 502 });
     }
     const { data: item, error } = await admin
       .from("print_editor_items")
@@ -114,11 +116,11 @@ export async function POST(req: NextRequest) {
   const complete = appUrl(`/tienda/${body.projectId}/editor-listo?item=%EDITOR_ID%&t=${token}`);
   const cancel = appUrl(access.galleryHref);
   try {
-    const url = await editorLink(configuredProductId, complete, cancel);
+    const url = await editorLink(configuredProductId, complete, cancel, { done: a.editorDone, back: a.editorBack });
     return NextResponse.json({ url, editorItemId });
   } catch (err) {
     console.error("[store] Enlace del editor", err);
-    return NextResponse.json({ error: "No se pudo abrir el editor. Inténtalo de nuevo." }, { status: 502 });
+    return NextResponse.json({ error: a.editorFailed }, { status: 502 });
   }
 }
 

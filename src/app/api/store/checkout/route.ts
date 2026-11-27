@@ -1,3 +1,4 @@
+import { getI18n } from "@/i18n/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { appUrl } from "@/lib/env";
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 const STATE_CODES = new Set(US_STATES.map(([code]) => code));
 
-const Body = z.object({
+const body = (a: { stateUnavailable: string; invalidZip: string }) => z.object({
   projectId: z.uuid(),
   items: z
     .array(
@@ -35,8 +36,8 @@ const Body = z.object({
     addr1: z.string().trim().min(3).max(100),
     addr2: z.string().trim().max(100).optional().default(""),
     city: z.string().trim().min(2).max(60),
-    state: z.string().refine((s) => STATE_CODES.has(s), "Estado no disponible"),
-    zip: z.string().trim().regex(/^\d{5}(-\d{4})?$/, "Código postal inválido"),
+    state: z.string().refine((s) => STATE_CODES.has(s), a.stateUnavailable),
+    zip: z.string().trim().regex(/^\d{5}(-\d{4})?$/, a.invalidZip),
   }),
 });
 
@@ -45,14 +46,16 @@ const Body = z.object({
  * devuelve la URL de Stripe Checkout. El navegador solo envía ids y cantidades.
  */
 export async function POST(req: NextRequest) {
-  const parsed = Body.safeParse(await req.json().catch(() => null));
+  const { t, locale } = await getI18n();
+  const a = t.api;
+  const parsed = body(a).safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos" }, { status: 400 });
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? a.invalidData }, { status: 400 });
   }
   const { projectId, items, buyer, address } = parsed.data;
 
   const access = await getStoreAccess(projectId);
-  if (!access) return NextResponse.json({ error: "La tienda de esta galería no está disponible." }, { status: 403 });
+  if (!access) return NextResponse.json({ error: a.storeUnavailable }, { status: 403 });
 
   const admin = createAdminClient();
   const products = new Map((await loadStoreProducts(admin, access.creator)).map((p) => [p.id, p]));
@@ -89,10 +92,10 @@ export async function POST(req: NextRequest) {
     const product = products.get(item.productId);
     const asset = assetById.get(item.assetId);
     if (!product || !asset || product.completion !== "api") {
-      return NextResponse.json({ error: "Un producto o una foto del carrito ya no está disponible." }, { status: 409 });
+      return NextResponse.json({ error: a.itemUnavailable }, { status: 409 });
     }
     if (!isPrintable({ ...asset, size_bytes: Number(asset.size_bytes) })) {
-      return NextResponse.json({ error: `La foto ${asset.file_name} no se puede imprimir.` }, { status: 409 });
+      return NextResponse.json({ error: a.notPrintable(asset.file_name) }, { status: 409 });
     }
     lines.push({
       productId: product.id,
@@ -127,10 +130,10 @@ export async function POST(req: NextRequest) {
       const row = rowById.get(item.editorItemId);
       const product = products.get(item.productId);
       if (!row || !product || row.product_id !== product.id || product.completion !== "editor") {
-        return NextResponse.json({ error: "Un diseño del carrito ya no está disponible." }, { status: 409 });
+        return NextResponse.json({ error: a.designUnavailable }, { status: 409 });
       }
       if (!row.finished) {
-        return NextResponse.json({ error: `Termina tu diseño de ${product.productName} antes de pagar.` }, { status: 409 });
+        return NextResponse.json({ error: a.finishDesign(product.productName) }, { status: 409 });
       }
       const quantity =
         product.kind === "card" ? normalizeQuantity(item.quantity, product.minQuantity, product.quantityStep) : Math.min(10, item.quantity);
@@ -150,20 +153,20 @@ export async function POST(req: NextRequest) {
       });
     } catch (err) {
       console.error("[store] calculate", err);
-      const msg = err instanceof WhccError && err.status === 400 ? "Revisa la dirección de envío." : "No pudimos cotizar tus diseños. Inténtalo de nuevo.";
+      const msg = err instanceof WhccError && err.status === 400 ? a.checkAddress : a.quoteFailed;
       return NextResponse.json({ error: msg }, { status: 502 });
     }
     const byConfigured = new Map(quoted.items.map((q) => [q.configuredProductId, q]));
     for (const d of pendingDesigns) {
       const q = byConfigured.get(d.configuredProductId);
       if (!q || !q.isValidForOrder || q.unitPriceCents <= 0) {
-        return NextResponse.json({ error: `Tu diseño de ${d.product.productName} necesita revisión. Ábrelo y termínalo.` }, { status: 409 });
+        return NextResponse.json({ error: a.designNeedsReview(d.product.productName) }, { status: 409 });
       }
       lines.push({
         productId: d.product.id,
         name: d.product.productName,
         sizeLabel: d.product.sizeLabel,
-        detail: d.product.kind === "card" ? "Tarjetas personalizadas" : "Diseño personalizado",
+        detail: d.product.kind === "card" ? a.customCards : a.customDesign,
         categoryRef: d.product.categoryRef,
         quantity: d.quantity,
         unitPriceCents: retailPriceCents(q.unitPriceCents, d.product.markupPercent),
@@ -213,13 +216,14 @@ export async function POST(req: NextRequest) {
         lab_cost_cents: quote.labProductCostCents,
         platform_fee_percent: PLANS[access.creator.plan].storeFeePercent,
         lab: LAB_ID,
+        locale,
       })
       .select("id, reference")
       .single();
     if (error && error.code !== "23505") throw error;
     order = data;
   }
-  if (!order) return NextResponse.json({ error: "No se pudo crear el pedido." }, { status: 500 });
+  if (!order) return NextResponse.json({ error: a.orderFailed }, { status: 500 });
 
   const { error: itemsError } = await admin.from("print_order_items").insert(
     lines.map((l) => ({
@@ -283,7 +287,7 @@ export async function POST(req: NextRequest) {
           shipping_rate_data: {
             type: "fixed_amount",
             fixed_amount: { amount: shippingCents, currency: "usd" },
-            display_name: groups > 1 ? `Envío económico (${groups} paquetes)` : "Envío económico",
+            display_name: a.shipping(groups),
             delivery_estimate: { minimum: { unit: "business_day", value: 5 }, maximum: { unit: "business_day", value: 12 } },
             ...(taxEnabled ? { tax_behavior: "exclusive" as const } : {}),
           },
@@ -293,12 +297,12 @@ export async function POST(req: NextRequest) {
       metadata: { kind: "print_order", order_id: order.id, reference: order.reference },
       payment_intent_data: {
         transfer_group: order.id,
-        description: `Impresiones ${order.reference} · ${access.creator.business_name}`,
+        description: a.paymentDescription(order.reference, access.creator.business_name),
         metadata: { kind: "print_order", order_id: order.id },
       },
       success_url: `${orderUrl(order.id)}&pagado=1`,
       cancel_url: appUrl(`/tienda/${projectId}`),
-      locale: "es",
+      locale: locale === "es" ? "es" : "en",
     },
     { idempotencyKey: `print-checkout-${order.id}` },
   );

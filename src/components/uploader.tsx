@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatBytes } from "@/lib/format";
+import { useI18n } from "@/i18n/client";
 
 // Subida multipart directa del navegador a R2. Next.js solo firma las partes:
 // los bytes nunca pasan por Vercel. Los archivos entran en la biblioteca del
@@ -70,10 +71,10 @@ function putPart(url: string, blob: Blob, onProgress: (loaded: number) => void, 
         }
         resolve(etag);
       } else {
-        reject(new Error(`Fallo al subir parte (${xhr.status})`));
+        reject(new Error(`HTTP ${xhr.status}`));
       }
     };
-    xhr.onerror = () => reject(new Error("Error de red"));
+    xhr.onerror = () => reject(new Error("Network error"));
     xhr.onabort = () => reject(new DOMException("Cancelado", "AbortError"));
     signal.addEventListener("abort", () => xhr.abort(), { once: true });
     xhr.send(blob);
@@ -178,6 +179,7 @@ export function Uploader({
   disabledReason?: string;
 }) {
   const router = useRouter();
+  const u = useI18n().t.editor.upload;
   const [items, setItems] = useState<Item[]>([]);
   const [dragging, setDragging] = useState(false);
   const controllers = useRef(new Map<string, AbortController>());
@@ -263,8 +265,8 @@ export function Uploader({
           dragging ? "border-brand-500 bg-brand-50" : "border-neutral-300 bg-white hover:border-neutral-400"
         }`}
       >
-        <p className="text-sm font-semibold">Arrastra aquí todo el material: fotos y videos</p>
-        <p className="mt-1 text-sm text-neutral-500">o haz clic para elegirlos · JPG, PNG, HEIC, WEBP, MP4, MOV, WEBM</p>
+        <p className="text-sm font-semibold">{u.drop}</p>
+        <p className="mt-1 text-sm text-neutral-500">{u.pick}</p>
         <input
           ref={inputRef}
           type="file"
@@ -281,7 +283,7 @@ export function Uploader({
       {items.length > 0 ? (
         <details className="mt-3" open={active > 0}>
           <summary className="cursor-pointer text-sm text-neutral-600">
-            {active > 0 ? `Subiendo… ${done} de ${items.length} listos` : `Subidas: ${done} de ${items.length} listas`}
+            {active > 0 ? u.uploading(done, items.length) : u.finished(done, items.length)}
           </summary>
           <ul className="mt-2 max-h-72 space-y-2 overflow-y-auto">
             {items.map((item) => (
@@ -290,14 +292,14 @@ export function Uploader({
                   <span className="truncate font-medium">{item.file.name}</span>
                   <span className="shrink-0 text-xs text-neutral-500">
                     {item.state === "done"
-                      ? "Listo"
+                      ? u.done
                       : item.state === "error"
-                        ? "Error"
+                        ? u.error
                         : item.state === "canceled"
-                          ? "Cancelado"
+                          ? u.canceled
                           : item.state === "queued"
-                            ? "En cola"
-                            : `${Math.floor(item.progress * 100)}% de ${formatBytes(item.file.size)}`}
+                            ? u.queued
+                            : u.progress(Math.floor(item.progress * 100), formatBytes(item.file.size))}
                   </span>
                   {item.state === "uploading" || item.state === "queued" ? (
                     <button
@@ -305,7 +307,7 @@ export function Uploader({
                       className="shrink-0 text-xs text-red-600 hover:underline"
                       onClick={() => controllers.current.get(item.id)?.abort()}
                     >
-                      Cancelar
+                      {u.cancel}
                     </button>
                   ) : null}
                 </div>

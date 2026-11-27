@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/i18n/client";
+
 import { useEffect, useState } from "react";
 
 /**
@@ -80,6 +82,7 @@ export function SaveToPhotosButton({
   const [status, setStatus] = useState<Status>("idle");
   const [files, setFiles] = useState<File[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const g = useI18n().t.gallery;
 
   // Si cambia el contenido (otra foto del carrusel), se reinicia.
   const key = media.map((m) => m.url).join("|");
@@ -92,7 +95,7 @@ export function SaveToPhotosButton({
   const totalBytes = media.reduce((n, m) => n + (m.size_bytes ?? 0), 0);
   if (!platform || media.length === 0 || totalBytes > MAX_SHARE_BYTES) return null;
 
-  const defaultLabel = platform === "ios" ? "Guardar en Fotos" : "Guardar en la galería";
+  const defaultLabel = platform === "ios" ? g.saveToPhotos : g.saveToGallery;
 
   async function share(list: File[]) {
     try {
@@ -106,7 +109,7 @@ export function SaveToPhotosButton({
       } else if (name === "NotAllowedError") {
         setStatus("ready"); // se perdió el gesto del toque: un toque más
       } else {
-        setError("No se pudo abrir el menú para guardar. Usa Descargar.");
+        setError(g.shareMenuFailed);
         setStatus("error");
       }
     }
@@ -130,24 +133,24 @@ export function SaveToPhotosButton({
       );
       setFiles(list);
       if (!navigator.canShare({ files: list })) {
-        setError("Este archivo no se puede guardar en Fotos desde el navegador. Usa Descargar.");
+        setError(g.cannotSave);
         setStatus("error");
         return;
       }
       await share(list);
     } catch {
-      setError("No se pudo preparar el archivo. Revisa tu conexión.");
+      setError(g.prepareFailed);
       setStatus("error");
     }
   }
 
   const text =
     status === "loading"
-      ? "Preparando…"
+      ? g.preparing
       : status === "ready"
-        ? "Listo · toca para guardar"
+        ? g.readyTap
         : status === "done"
-          ? "¡Listo!"
+          ? g.doneBang
           : (label ?? defaultLabel);
 
   return (

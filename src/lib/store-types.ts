@@ -86,13 +86,3 @@ export const US_STATES: [string, string][] = [
   ["WA", "Washington"], ["WV", "West Virginia"], ["WI", "Wisconsin"], ["WY", "Wyoming"],
 ];
 
-export const ORDER_STATUS_LABEL: Record<string, string> = {
-  pending_payment: "Pago pendiente",
-  paid: "Pagado",
-  submitting: "Enviando al laboratorio",
-  in_production: "En producción",
-  shipped: "Enviado",
-  canceled: "Cancelado",
-  refunded: "Reembolsado",
-  failed: "Con problemas",
-};

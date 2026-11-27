@@ -347,15 +347,20 @@ export async function createEditorProduct(input: {
  * Enlace al editor de WHCC. Es una credencial: no se guarda ni se registra.
  * `completeUrl` debe incluir %EDITOR_ID% y un token propio de un solo uso.
  */
-export async function editorLink(configuredProductId: string, completeUrl: string, cancelUrl: string): Promise<string> {
+export async function editorLink(
+  configuredProductId: string,
+  completeUrl: string,
+  cancelUrl: string,
+  texts: { done: string; back: string },
+): Promise<string> {
   const res = await whcc<{ actions?: { edit?: { url: string } } }>(
     `/v1/commerce/configured-products/${encodeURIComponent(configuredProductId)}/edit-link`,
     {
       method: "POST",
       body: JSON.stringify({
         redirects: {
-          complete: { text: "Listo, volver al carrito", url: completeUrl },
-          cancel: { text: "Volver a la galería", url: cancelUrl },
+          complete: { text: texts.done, url: completeUrl },
+          cancel: { text: texts.back, url: cancelUrl },
         },
         // Sin opción de subir fotos: el cliente usa solo las de la galería.
         settings: { hidePricing: true, disableUploads: true, addToProject: false, productSwitcher: false },

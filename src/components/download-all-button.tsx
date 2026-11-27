@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { downloadAll, type ZipEntry } from "@/lib/zip-download";
+import { useI18n } from "@/i18n/client";
 
 export function DownloadAllButton({
   entries,
@@ -18,6 +19,7 @@ export function DownloadAllButton({
 }) {
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const g = useI18n().t.gallery;
 
   async function run() {
     setError(null);
@@ -25,7 +27,8 @@ export function DownloadAllButton({
     try {
       await downloadAll(entries, zipName, setProgress);
     } catch (err) {
-      setError((err as Error).message || "No se pudo completar la descarga");
+      console.error("[download-all]", err);
+      setError(g.downloadFailed);
     } finally {
       setProgress(null);
     }
@@ -40,7 +43,7 @@ export function DownloadAllButton({
         className={`whitespace-nowrap ${className}`}
         style={style}
       >
-        {progress === null ? label : `Preparando ZIP… ${Math.round(progress * 100)}%`}
+        {progress === null ? label : g.preparingZip(Math.round(progress * 100))}
       </button>
       {error ? <span className="mt-1 text-xs text-red-600">{error}</span> : null}
     </span>

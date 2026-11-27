@@ -1,5 +1,8 @@
 "use client";
 
+import { useI18n } from "@/i18n/client";
+import { LanguageSwitch } from "@/components/language-switch";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DownloadAllButton } from "@/components/download-all-button";
 import { MediaCarousel } from "@/components/media-carousel";
@@ -13,8 +16,9 @@ import {
 import { pad, slugify, type ZipEntry } from "@/lib/zip-download";
 
 function CarouselIcon() {
+  const label = useI18n().t.gallery.carousel;
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5 drop-shadow" fill="white" aria-label="Carrusel">
+    <svg viewBox="0 0 24 24" className="h-5 w-5 drop-shadow" fill="white" aria-label={label}>
       <path d="M8 3h11a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-1V7a2 2 0 0 0-2-2H6V5a2 2 0 0 1 2-2Z" />
       <rect x="3" y="7" width="13" height="14" rx="2" />
     </svg>
@@ -30,13 +34,14 @@ function VideoIcon() {
 }
 
 function Tile({ post, onOpen }: { post: FeedPostData; onOpen: () => void }) {
+  const g = useI18n().t.gallery;
   const first = post.media[0];
   return (
     <button
       type="button"
       onClick={onOpen}
       className="group relative block aspect-[4/5] w-full overflow-hidden bg-neutral-100"
-      aria-label="Abrir publicación"
+      aria-label={g.openPost}
     >
       {first ? (
         first.kind === "photo" ? (
@@ -74,6 +79,7 @@ function DesktopModal({
   onClose: () => void;
   onNavigate: (i: number) => void;
 }) {
+  const g = useI18n().t.gallery;
   const post = posts[index];
   const [current, setCurrent] = useState(0);
   const onIndexChange = useCallback((i: number) => setCurrent(i), []);
@@ -90,7 +96,7 @@ function DesktopModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6" onClick={onClose} role="dialog" aria-modal>
-      <button type="button" onClick={onClose} aria-label="Cerrar" className="absolute right-4 top-3 text-3xl text-white">
+      <button type="button" onClick={onClose} aria-label={g.close} className="absolute right-4 top-3 text-3xl text-white">
         ×
       </button>
       {index > 0 ? (
@@ -100,7 +106,7 @@ function DesktopModal({
             e.stopPropagation();
             onNavigate(index - 1);
           }}
-          aria-label="Publicación anterior"
+          aria-label={g.prevPost}
           className="absolute left-4 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white text-xl"
         >
           ‹
@@ -113,7 +119,7 @@ function DesktopModal({
             e.stopPropagation();
             onNavigate(index + 1);
           }}
-          aria-label="Publicación siguiente"
+          aria-label={g.nextPost}
           className="absolute right-4 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white text-xl"
         >
           ›
@@ -146,7 +152,7 @@ function DesktopModal({
                 {post.caption}
               </p>
             ) : (
-              <p className="text-neutral-400">Esta publicación no tiene copy.</p>
+              <p className="text-neutral-400">{g.noCaption}</p>
             )}
           </div>
           <div className="space-y-2 border-t border-neutral-200 px-4 py-3">
@@ -154,7 +160,7 @@ function DesktopModal({
               key={post.id}
               post={post}
               current={current}
-              zipBase={`${zipPrefix}-publicacion-${pad(index + 1)}`}
+              zipBase={`${zipPrefix}-${g.postSlug}-${pad(index + 1)}`}
             />
           </div>
         </aside>
@@ -177,6 +183,7 @@ function MobileFeed({
   zipPrefix: string;
   onClose: () => void;
 }) {
+  const g = useI18n().t.gallery;
   const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = scroller.current?.querySelector(`#post-${posts[index].id}`);
@@ -186,10 +193,10 @@ function MobileFeed({
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white" role="dialog" aria-modal>
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-neutral-200 px-3">
-        <button type="button" onClick={onClose} className="px-2 text-2xl" aria-label="Volver">
+        <button type="button" onClick={onClose} className="px-2 text-2xl" aria-label={g.back}>
           ‹
         </button>
-        <span className="font-semibold">Publicaciones</span>
+        <span className="font-semibold">{g.posts}</span>
       </header>
       <div ref={scroller} className="flex-1 overflow-y-auto">
         {posts.map((p, i) => (
@@ -210,6 +217,7 @@ export function InstagramFeedTemplate({
   authorName: string;
   posts: FeedPostData[];
 }) {
+  const g = useI18n().t.gallery;
   const [open, setOpen] = useState<{ index: number; desktop: boolean } | null>(null);
   const zipPrefix = slugify(title);
 
@@ -236,14 +244,14 @@ export function InstagramFeedTemplate({
             <p className="truncate text-sm text-neutral-500">{title}</p>
           </div>
           <div className="flex gap-5 text-sm">
-            <span><strong>{posts.length}</strong> publicaciones</span>
-            <span><strong>{carousels}</strong> carruseles</span>
-            <span className="hidden sm:inline"><strong>{files}</strong> archivos</span>
+            <span><strong>{posts.length}</strong> {g.postsCount}</span>
+            <span><strong>{carousels}</strong> {g.carouselsCount}</span>
+            <span className="hidden sm:inline"><strong>{files}</strong> {g.filesCount}</span>
           </div>
           <DownloadAllButton
             entries={allEntries}
             zipName={`${zipPrefix}.zip`}
-            label={`↓ Descargar todo (${files})`}
+            label={g.downloadAllCount(files)}
             className="btn-primary px-4 py-1.5 text-sm"
           />
         </div>
@@ -252,7 +260,7 @@ export function InstagramFeedTemplate({
       <div className="border-t border-neutral-200" />
 
       {posts.length === 0 ? (
-        <p className="py-16 text-center text-sm text-neutral-500">Todavía no hay publicaciones.</p>
+        <p className="py-16 text-center text-sm text-neutral-500">{g.noPosts}</p>
       ) : (
         <div className="grid grid-cols-3 gap-[3px] pt-[3px]">
           {posts.map((p, i) => (
@@ -264,6 +272,9 @@ export function InstagramFeedTemplate({
           ))}
         </div>
       )}
+      <div className="flex justify-center py-8 text-neutral-500">
+        <LanguageSwitch />
+      </div>
 
       {open?.desktop ? (
         <DesktopModal

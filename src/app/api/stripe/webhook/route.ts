@@ -115,6 +115,7 @@ async function handleEvent(event: Stripe.Event): Promise<void> {
         planName: plan.name,
         price: formatPrice(plan),
         trialEndsAt: new Date(subscription.trial_end * 1000),
+        locale: creator.locale,
       });
       return;
     }
@@ -131,6 +132,7 @@ async function handleEvent(event: Stripe.Event): Promise<void> {
           to,
           businessName: result.creator.business_name,
           graceDays: portalGracePeriodDays(),
+          locale: result.creator.locale,
         });
       }
       return;

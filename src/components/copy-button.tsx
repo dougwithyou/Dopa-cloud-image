@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useI18n } from "@/i18n/client";
 
-export function CopyButton({ text, className = "btn-secondary", label = "Copiar texto" }: { text: string; className?: string; label?: string }) {
+export function CopyButton({ text, className = "btn-secondary", label }: { text: string; className?: string; label?: string }) {
   const [copied, setCopied] = useState(false);
+  const g = useI18n().t.gallery;
 
   async function copy() {
     try {
@@ -26,7 +28,7 @@ export function CopyButton({ text, className = "btn-secondary", label = "Copiar 
 
   return (
     <button type="button" onClick={copy} className={className} aria-live="polite">
-      {copied ? "¡Copiado!" : label}
+      {copied ? g.copiedBang : (label ?? g.copyText)}
     </button>
   );
 }

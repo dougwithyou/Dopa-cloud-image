@@ -1,3 +1,4 @@
+import { getI18n } from "@/i18n/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { loadPendingAsset } from "@/lib/upload-session";
@@ -19,9 +20,10 @@ const Body = z.object({
  * marca el asset como upload_status = 'complete'.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ assetId: string }> }) {
+  const a = (await getI18n()).t.api;
   const { assetId } = await params;
   const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Solicitud inválida" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: a.invalidRequest }, { status: 400 });
 
   const loaded = await loadPendingAsset(assetId);
   if (!loaded.ok) return NextResponse.json({ error: loaded.error }, { status: loaded.status });
@@ -30,14 +32,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ass
   const { partCount } = partPlan(asset.size_bytes);
   const numbers = new Set(parsed.data.parts.map((p) => p.partNumber));
   if (numbers.size !== partCount || [...numbers].some((n) => n > partCount)) {
-    return NextResponse.json({ error: "Faltan partes o hay partes de más" }, { status: 400 });
+    return NextResponse.json({ error: a.partsMismatch }, { status: 400 });
   }
 
   try {
     await completeMultipartUpload(asset.r2_key, asset.r2_upload_id, parsed.data.parts);
   } catch (err) {
     console.error("[uploads] completeMultipartUpload", err);
-    return NextResponse.json({ error: "No se pudo completar la subida" }, { status: 502 });
+    return NextResponse.json({ error: a.completeFailed }, { status: 502 });
   }
 
   const admin = createAdminClient();
@@ -48,7 +50,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ass
   if (!head || head.size > asset.size_bytes || head.size === 0) {
     await deleteObject(asset.r2_key).catch(() => undefined);
     await admin.from("assets").delete().eq("id", asset.id);
-    return NextResponse.json({ error: "El archivo subido no coincide con el declarado" }, { status: 400 });
+    return NextResponse.json({ error: a.fileMismatch }, { status: 400 });
   }
 
   const { data, error } = await admin
@@ -65,7 +67,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ass
     .single();
   if (error) {
     console.error("[uploads] marcar complete", error);
-    return NextResponse.json({ error: "No se pudo registrar el archivo" }, { status: 500 });
+    return NextResponse.json({ error: a.registerFailed }, { status: 500 });
   }
 
   return NextResponse.json({ asset: data });

@@ -25,6 +25,8 @@ export type CreatorRow = {
   connect_payouts_enabled: boolean;
   /** Margen por defecto sobre el costo del laboratorio (100 = duplica el costo). */
   store_markup_percent: number;
+  /** Idioma del fotógrafo (correos). */
+  locale: "en" | "es";
   created_at: string;
   updated_at: string;
 }
@@ -212,6 +214,8 @@ export type PrintOrderRow = {
   lab_confirmation_ids: string[];
   tracking: TrackingInfo[];
   failure_reason: string | null;
+  /** Idioma del comprador. */
+  locale: "en" | "es";
   paid_at: string | null;
   submitted_at: string | null;
   shipped_at: string | null;
@@ -265,6 +269,7 @@ export type Database = {
           | "stripe_connect_account_id"
           | "connect_payouts_enabled"
           | "store_markup_percent"
+          | "locale"
           | "created_at"
           | "updated_at"
         >;
@@ -409,6 +414,7 @@ export type Database = {
           | "lab_confirmation_ids"
           | "tracking"
           | "failure_reason"
+          | "locale"
           | "paid_at"
           | "submitted_at"
           | "shipped_at"

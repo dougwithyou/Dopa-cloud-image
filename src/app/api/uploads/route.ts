@@ -1,10 +1,20 @@
 import { randomUUID } from "node:crypto";
+import { getI18n } from "@/i18n/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getCreatorContext } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildAssetKey, createMultipartUpload } from "@/lib/r2";
-import { partPlan, validateUpload } from "@/lib/upload-rules";
+import { partPlan, validateUpload, type UploadValidation } from "@/lib/upload-rules";
+import type { Messages } from "@/i18n/messages";
+
+/** Motivo del rechazo de un archivo, en el idioma de quien sube. */
+function uploadError(a: Messages["api"], v: Extract<UploadValidation, { ok: false }>, mimeType = ""): string {
+  if (v.code === "type") return a.fileType(mimeType);
+  if (v.code === "ext") return a.fileExt(v.ext ?? "", mimeType);
+  if (v.code === "too_big") return a.fileTooBig(v.maxMb ?? 0);
+  return a.fileSize;
+}
 import { checkUploadLimits, limitErrorFromDb } from "@/lib/limits";
 
 export const dynamic = "force-dynamic";
@@ -28,16 +38,17 @@ const Body = z.object({
  * El navegador recibe solo el id del asset y el plan de partes.
  */
 export async function POST(req: NextRequest) {
+  const a = (await getI18n()).t.api;
   const ctx = await getCreatorContext();
-  if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  if (!ctx) return NextResponse.json({ error: a.notAuthenticated }, { status: 401 });
   const { supabase, creator } = ctx;
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Solicitud inválida" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: a.invalidRequest }, { status: 400 });
   const { projectId, postId, fileName, mimeType, size } = parsed.data;
 
   const validation = validateUpload({ fileName, mimeType, size });
-  if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 415 });
+  if (!validation.ok) return NextResponse.json({ error: uploadError(a, validation, mimeType) }, { status: 415 });
 
   const limits = await checkUploadLimits(creator, size);
   if (!limits.ok) return NextResponse.json({ error: limits.message, code: limits.code }, { status: 403 });
@@ -49,7 +60,7 @@ export async function POST(req: NextRequest) {
     .eq("id", projectId)
     .eq("creator_id", creator.id)
     .maybeSingle();
-  if (!project) return NextResponse.json({ error: "Proyecto no encontrado" }, { status: 404 });
+  if (!project) return NextResponse.json({ error: a.projectNotFound }, { status: 404 });
 
   const assetId = randomUUID();
   const key = buildAssetKey({
@@ -73,10 +84,10 @@ export async function POST(req: NextRequest) {
     p_size_bytes: size,
   });
   if (reserveError) {
-    const mapped = limitErrorFromDb(reserveError.message);
+    const mapped = await limitErrorFromDb(reserveError.message);
     if (mapped) return NextResponse.json({ error: mapped.message, code: mapped.code }, { status: 403 });
     console.error("[uploads] reserve_asset_upload", reserveError);
-    return NextResponse.json({ error: "No se pudo iniciar la subida" }, { status: 500 });
+    return NextResponse.json({ error: a.uploadStartFailed }, { status: 500 });
   }
 
   try {
@@ -86,7 +97,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("[uploads] createMultipartUpload", err);
     await admin.from("assets").delete().eq("id", assetId);
-    return NextResponse.json({ error: "No se pudo iniciar la subida en el almacenamiento" }, { status: 502 });
+    return NextResponse.json({ error: a.storageStartFailed }, { status: 502 });
   }
 
   const plan = partPlan(size);

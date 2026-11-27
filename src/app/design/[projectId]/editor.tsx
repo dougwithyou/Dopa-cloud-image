@@ -18,6 +18,7 @@ import {
   type StyleId,
 } from "@/lib/gallery-design";
 import { saveGalleryDesign } from "@/app/dashboard/actions";
+import { useI18n } from "@/i18n/client";
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -79,6 +80,7 @@ export function GalleryEditor({
   initialDesign: GalleryDesign;
 }) {
   const [design, setDesign] = useState(initialDesign);
+  const d_ = useI18n().t.design;
   const [saved, setSaved] = useState(initialDesign);
   const [notice, setNotice] = useState<{ error?: string; message?: string } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -110,16 +112,16 @@ export function GalleryEditor({
           href={`/dashboard/projects/${projectId}`}
           className="inline-flex items-center gap-1.5 text-sm text-neutral-600 hover:text-neutral-900"
         >
-          <ArrowLeftIcon className="h-4 w-4" /> Volver al proyecto
+          <ArrowLeftIcon className="h-4 w-4" /> {d_.back}
         </Link>
-        <p className="hidden truncate text-sm font-semibold sm:block">Diseño de la galería · {title}</p>
+        <p className="hidden truncate text-sm font-semibold sm:block">{d_.heading(title)}</p>
         <div className="flex items-center gap-2">
           <Link href={`/preview/${projectId}`} target="_blank" className="btn-ghost px-2.5 py-1.5">
             <EyeIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">Vista previa</span>
+            <span className="hidden sm:inline">{d_.preview}</span>
           </Link>
           <button type="button" className="btn-primary px-4 py-1.5" disabled={!dirty || pending} onClick={save}>
-            {pending ? "Guardando…" : dirty ? "Guardar" : "Guardado"}
+            {pending ? d_.saving : dirty ? d_.save : d_.saved}
           </button>
         </div>
       </header>
@@ -146,14 +148,14 @@ export function GalleryEditor({
             <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">{notice.message}</p>
           ) : null}
 
-          <Panel title="Estilo">
+          <Panel title={d_.style}>
             <div className="grid grid-cols-3 gap-2">
               {(Object.keys(STYLES) as StyleId[]).map((id) => (
                 <button
                   key={id}
                   type="button"
                   onClick={() => applyStyle(id)}
-                  title={STYLES[id].help}
+                  title={d_.styleHelp[id] ?? STYLES[id].help}
                   className={`rounded-md border px-2 py-1.5 text-xs transition ${
                     design.style === id ? "border-neutral-900 font-semibold" : "border-transparent text-neutral-600 hover:border-neutral-300"
                   }`}
@@ -171,8 +173,8 @@ export function GalleryEditor({
                     key={id}
                     type="button"
                     onClick={() => set("palette", id)}
-                    title={p.label}
-                    aria-label={`Paleta ${p.label}`}
+                    title={d_.palettes[id] ?? p.label}
+                    aria-label={d_.palette(d_.palettes[id] ?? p.label)}
                     className={`h-9 w-9 overflow-hidden rounded-full transition ${
                       active ? "ring-2 ring-neutral-900 ring-offset-2" : "ring-1 ring-neutral-300 hover:ring-neutral-500"
                     }`}
@@ -186,7 +188,7 @@ export function GalleryEditor({
             </div>
           </Panel>
 
-          <Panel title="Tipografía">
+          <Panel title={d_.typography}>
             <div className="grid grid-cols-2 gap-2">
               {(["sans", "serif"] as const).map((id) => (
                 <button
@@ -205,7 +207,7 @@ export function GalleryEditor({
             </div>
           </Panel>
 
-          <Panel title="Portada">
+          <Panel title={d_.cover}>
             <div className="grid grid-cols-3 gap-2">
               {(Object.keys(COVERS) as CoverId[]).map((id) => (
                 <button key={id} type="button" onClick={() => set("cover", id)} className="text-left">
@@ -216,13 +218,13 @@ export function GalleryEditor({
                   >
                     <CoverSketch cover={id} />
                   </span>
-                  <span className="mt-1 block text-[11px] text-neutral-600">{COVERS[id].label}</span>
+                  <span className="mt-1 block text-[11px] text-neutral-600">{d_.covers[id] ?? COVERS[id].label}</span>
                 </button>
               ))}
             </div>
             {photos.length > 0 ? (
               <>
-                <p className="mb-2 mt-4 text-xs text-neutral-500">Foto de portada</p>
+                <p className="mb-2 mt-4 text-xs text-neutral-500">{d_.coverPhoto}</p>
                 <div className="flex gap-1.5 overflow-x-auto pb-1">
                   {photos.slice(0, 60).map((m, i) => {
                     const active = design.coverAssetId ? design.coverAssetId === m.id : i === 0;
@@ -244,11 +246,11 @@ export function GalleryEditor({
             ) : null}
           </Panel>
 
-          <Panel title="Cuadrícula">
+          <Panel title={d_.grid}>
             <label className="block text-xs text-neutral-600">
               <span className="flex justify-between">
-                <span>Fotos pequeñas</span>
-                <span>Fotos grandes</span>
+                <span>{d_.smallPhotos}</span>
+                <span>{d_.largePhotos}</span>
               </span>
               <input
                 type="range"
@@ -262,8 +264,8 @@ export function GalleryEditor({
             </label>
             <label className="mt-3 block text-xs text-neutral-600">
               <span className="flex justify-between">
-                <span>Espacio estrecho</span>
-                <span>Espacio amplio</span>
+                <span>{d_.tightSpacing}</span>
+                <span>{d_.wideSpacing}</span>
               </span>
               <input
                 type="range"
@@ -277,12 +279,12 @@ export function GalleryEditor({
             </label>
           </Panel>
 
-          <Panel title="Escenas">
+          <Panel title={d_.scenes}>
             <p className="text-xs leading-relaxed text-neutral-600">
               {scenes.length > 0
-                ? `Tienes ${scenes.length} escena(s). Las fotos sin escena aparecen al final como “Más fotos”.`
-                : "Organiza la galería en secciones (p. ej. Ceremonia, Recepción)."}{" "}
-              Créalas en el proyecto: selecciona fotos en el material y pulsa “Crear escena”.
+                ? d_.scenesSome(scenes.length)
+                : d_.scenesNone}{" "}
+              {d_.scenesHow}
             </p>
           </Panel>
         </aside>

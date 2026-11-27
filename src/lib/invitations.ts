@@ -14,7 +14,7 @@ import type { ClientRow, CreatorRow } from "@/types/database";
  */
 export async function sendClientAccess(
   client: Pick<ClientRow, "id" | "name" | "email">,
-  creator: Pick<CreatorRow, "business_name">,
+  creator: Pick<CreatorRow, "business_name" | "locale">,
   replyTo?: string,
 ): Promise<void> {
   const admin = createAdminClient();
@@ -52,6 +52,7 @@ export async function sendClientAccess(
     creatorName: creator.business_name,
     link,
     replyTo,
+    locale: creator.locale,
   });
 
   // invited_at = fecha en que se envió el acceso.

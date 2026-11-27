@@ -11,6 +11,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { ProjectStatus } from "@/types/database";
 import { validateDesign } from "@/lib/gallery-design";
 import { newShareToken } from "@/lib/share";
+import { getI18n } from "@/i18n/server";
+
+/** Mensajes en el idioma de quien usa el panel. */
+async function msg() {
+  return (await getI18n()).t.errors;
+}
 
 export type ActionState = { error?: string; message?: string } | null;
 
@@ -45,11 +51,11 @@ async function abortPendingUploads(projectIds: string[]) {
 export async function updateBusinessName(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const { supabase, creator } = await ctxOrThrow();
   const name = z.string().trim().min(1).max(120).safeParse(formData.get("businessName"));
-  if (!name.success) return { error: "Nombre inválido" };
+  if (!name.success) return { error: (await msg()).invalidName };
   const { error } = await supabase.from("creators").update({ business_name: name.data }).eq("id", creator.id);
-  if (error) return { error: "No se pudo guardar" };
+  if (error) return { error: (await msg()).couldNotSave };
   revalidatePath("/dashboard", "layout");
-  return { message: "Guardado" };
+  return { message: (await getI18n()).t.common.saved };
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +70,7 @@ type ClientForAccess = { id: string; name: string; email: string; user_id: strin
  */
 async function sendAccess(
   client: ClientForAccess,
-  creator: { business_name: string },
+  creator: { business_name: string; locale: "en" | "es" },
   replyTo: string | undefined,
 ): Promise<boolean> {
   if (client.user_id) return true; // ya tiene cuenta: entra con su contraseña
@@ -86,8 +92,8 @@ export async function createClient(_prev: ActionState, formData: FormData): Prom
   const { supabase, creator } = await ctxOrThrow();
   const parsed = z
     .object({
-      name: z.string().trim().min(1, "Escribe el nombre del cliente").max(120),
-      email: z.email("Correo inválido").transform((v) => v.trim().toLowerCase()),
+      name: z.string().trim().min(1, (await msg()).clientName).max(120),
+      email: z.email((await msg()).invalidEmail).transform((v) => v.trim().toLowerCase()),
     })
     .safeParse({ name: formData.get("name"), email: formData.get("email") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
@@ -99,11 +105,11 @@ export async function createClient(_prev: ActionState, formData: FormData): Prom
     .from("clients")
     .insert({ creator_id: creator.id, name: parsed.data.name, email: parsed.data.email });
   if (error) {
-    if (error.code === "23505") return { error: "Ya tienes un cliente con ese correo" };
-    return { error: limitErrorFromDb(error.message)?.message ?? "No se pudo agregar el cliente" };
+    if (error.code === "23505") return { error: (await msg()).duplicateClient };
+    return { error: (await limitErrorFromDb(error.message))?.message ?? (await msg()).addClientFailed };
   }
   revalidatePath("/dashboard", "layout");
-  return { message: `${parsed.data.name} quedó agregado. Ahora puedes asignarlo a un proyecto.` };
+  return { message: (await msg()).clientAdded(parsed.data.name) };
 }
 
 /** Reenvía el enlace de acceso a un cliente que todavía no ha entrado. */
@@ -137,7 +143,7 @@ export async function createProject(_prev: ActionState, formData: FormData): Pro
   const { supabase, creator } = await ctxOrThrow();
   const parsed = z
     .object({
-      title: z.string().trim().min(1, "Ingresa un título").max(160),
+      title: z.string().trim().min(1, (await msg()).enterTitle).max(160),
       type: z.enum(["photo_session", "monthly_content"]),
       clientId: z.union([Id, z.literal("")]).optional(),
     })
@@ -146,7 +152,7 @@ export async function createProject(_prev: ActionState, formData: FormData): Pro
       type: formData.get("type"),
       clientId: formData.get("clientId") ?? undefined,
     });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? (await msg()).invalidData };
 
   // El cliente es opcional (también se puede agregar después). La FK compuesta
   // (creator_id, client_id) impide usar un cliente de otro creador.
@@ -160,7 +166,7 @@ export async function createProject(_prev: ActionState, formData: FormData): Pro
     })
     .select("id")
     .single();
-  if (error || !data) return { error: "No se pudo crear el proyecto" };
+  if (error || !data) return { error: (await msg()).createProjectFailed };
   redirect(`/dashboard/projects/${data.id}`);
 }
 
@@ -173,7 +179,7 @@ export async function createProject(_prev: ActionState, formData: FormData): Pro
 export async function addClientToProject(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const { supabase, creator, user } = await ctxOrThrow();
   const projectId = Id.safeParse(formData.get("projectId"));
-  if (!projectId.success) return { error: "Proyecto inválido" };
+  if (!projectId.success) return { error: (await msg()).invalidProject };
 
   const { data: project } = await supabase
     .from("projects")
@@ -181,7 +187,7 @@ export async function addClientToProject(_prev: ActionState, formData: FormData)
     .eq("id", projectId.data)
     .eq("creator_id", creator.id)
     .maybeSingle();
-  if (!project) return { error: "Proyecto no encontrado" };
+  if (!project) return { error: (await msg()).projectNotFound };
 
   let client: ClientForAccess | null = null;
   const choice = formData.get("clientId");
@@ -189,8 +195,8 @@ export async function addClientToProject(_prev: ActionState, formData: FormData)
   if (choice === "new") {
     const parsed = z
       .object({
-        name: z.string().trim().min(1, "Escribe el nombre del cliente").max(120),
-        email: z.email("Correo inválido").transform((v) => v.trim().toLowerCase()),
+        name: z.string().trim().min(1, (await msg()).clientName).max(120),
+        email: z.email((await msg()).invalidEmail).transform((v) => v.trim().toLowerCase()),
       })
       .safeParse({ name: formData.get("name"), email: formData.get("email") });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message };
@@ -215,21 +221,21 @@ export async function addClientToProject(_prev: ActionState, formData: FormData)
         .select("id, name, email, user_id")
         .single();
       if (error || !created) {
-        const mapped = limitErrorFromDb(error?.message);
-        return { error: mapped?.message ?? "No se pudo crear el cliente" };
+        const mapped = await limitErrorFromDb(error?.message);
+        return { error: mapped?.message ?? (await msg()).createClientFailed };
       }
       client = created;
     }
   } else {
     const clientId = Id.safeParse(choice);
-    if (!clientId.success) return { error: "Elige un cliente" };
+    if (!clientId.success) return { error: (await msg()).pickClient };
     const { data: found } = await supabase
       .from("clients")
       .select("id, name, email, user_id")
       .eq("id", clientId.data)
       .eq("creator_id", creator.id)
       .maybeSingle();
-    if (!found) return { error: "Cliente no encontrado" };
+    if (!found) return { error: (await msg()).clientNotFound };
     client = found;
   }
 
@@ -239,21 +245,21 @@ export async function addClientToProject(_prev: ActionState, formData: FormData)
     .update({ client_id: client.id })
     .eq("id", project.id)
     .eq("creator_id", creator.id);
-  if (updateError) return { error: "No se pudo agregar el cliente al proyecto" };
+  if (updateError) return { error: (await msg()).assignFailed };
 
   revalidatePath(`/dashboard/projects/${project.id}`);
   revalidatePath("/dashboard", "layout");
 
   if (project.status !== "published") {
     return {
-      message: `${client.name} quedó agregado. Recibirá su acceso por correo cuando publiques el proyecto.`,
+      message: (await msg()).assignedOnPublish(client.name),
     };
   }
-  if (client.user_id) return { message: `${client.name} quedó agregado y ya puede ver el proyecto en su portal.` };
+  if (client.user_id) return { message: (await msg()).assignedHasAccess(client.name) };
   const sent = await sendAccess(client, creator, user.email);
   return sent
-    ? { message: `${client.name} quedó agregado. Le enviamos su acceso a ${client.email}.` }
-    : { error: `${client.name} quedó agregado, pero no se pudo enviar el correo. Usa “Reenviar acceso” en Clientes.` };
+    ? { message: (await msg()).assignedSent(client.name, client.email) }
+    : { error: (await msg()).assignedMailFailed(client.name) };
 }
 
 // ---------------------------------------------------------------------------
@@ -310,7 +316,7 @@ export async function saveGalleryDesign(input: { projectId: string; design: unkn
   const { supabase, creator } = await ctxOrThrow();
   const projectId = Id.safeParse(input.projectId);
   const design = validateDesign(input.design);
-  if (!projectId.success || !design) return { error: "Diseño inválido" };
+  if (!projectId.success || !design) return { error: (await msg()).invalidDesign };
   const { data, error } = await supabase
     .from("projects")
     .update({ design: design as unknown as Record<string, unknown> })
@@ -318,10 +324,10 @@ export async function saveGalleryDesign(input: { projectId: string; design: unkn
     .eq("creator_id", creator.id)
     .select("id")
     .maybeSingle();
-  if (error || !data) return { error: "No se pudo guardar el diseño" };
+  if (error || !data) return { error: (await msg()).saveDesignFailed };
   revalidatePath(`/design/${projectId.data}`);
   revalidatePath(`/preview/${projectId.data}`);
-  return { message: "Diseño guardado" };
+  return { message: (await msg()).designSaved };
 }
 
 /** Cambia la plantilla (tipo) del proyecto: galería de fotos o feed de Instagram. */
@@ -329,9 +335,9 @@ export async function saveGalleryDesign(input: { projectId: string; design: unkn
 export async function renameProject(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const { supabase, creator } = await ctxOrThrow();
   const parsed = z
-    .object({ projectId: Id, title: z.string().trim().min(1, "El título no puede quedar vacío").max(160) })
+    .object({ projectId: Id, title: z.string().trim().min(1, (await msg()).titleEmpty).max(160) })
     .safeParse({ projectId: formData.get("projectId"), title: formData.get("title") });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Título inválido" };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? (await msg()).invalidTitle };
   const { data, error } = await supabase
     .from("projects")
     .update({ title: parsed.data.title })
@@ -339,9 +345,9 @@ export async function renameProject(_prev: ActionState, formData: FormData): Pro
     .eq("creator_id", creator.id)
     .select("id")
     .maybeSingle();
-  if (error || !data) return { error: "No se pudo cambiar el título" };
+  if (error || !data) return { error: (await msg()).renameFailed };
   revalidatePath("/dashboard", "layout");
-  return { message: "Título actualizado" };
+  return { message: (await msg()).titleUpdated };
 }
 
 export async function updateProjectType(formData: FormData): Promise<void> {
@@ -440,7 +446,7 @@ export async function reorderPosts(input: { projectId: string; postIds: string[]
   const { supabase, creator } = await ctxOrThrow();
   const projectId = Id.safeParse(input.projectId);
   const postIds = z.array(Id).max(1000).safeParse(input.postIds);
-  if (!projectId.success || !postIds.success) return { error: "Orden inválido" };
+  if (!projectId.success || !postIds.success) return { error: (await msg()).invalidOrder };
 
   const { data: current } = await supabase
     .from("posts")
@@ -449,7 +455,7 @@ export async function reorderPosts(input: { projectId: string; postIds: string[]
     .eq("creator_id", creator.id);
   const known = new Map((current ?? []).map((p) => [p.id, p.position]));
   if (postIds.data.length !== known.size || postIds.data.some((id) => !known.has(id))) {
-    return { error: "La lista cambió mientras ordenabas. Recarga la página." };
+    return { error: (await msg()).listChanged };
   }
 
   const results = await Promise.all(
@@ -459,9 +465,9 @@ export async function reorderPosts(input: { projectId: string; postIds: string[]
         : supabase.from("posts").update({ position }).eq("id", id).eq("creator_id", creator.id),
     ),
   );
-  if (results.some((r) => r?.error)) return { error: "No se pudo guardar el orden" };
+  if (results.some((r) => r?.error)) return { error: (await msg()).orderFailed };
   revalidatePath(`/dashboard/projects/${projectId.data}`);
-  return { message: "Orden guardado" };
+  return { message: (await msg()).orderSaved };
 }
 
 /** Cambia el orden de una publicación dentro del proyecto. */
@@ -542,7 +548,7 @@ async function swapAndRenumber(
 // ---------------------------------------------------------------------------
 
 const MAX_CAROUSEL = 20;
-const AssetIds = z.array(Id).min(1, "Selecciona al menos un archivo").max(200);
+const AssetIds = z.array(Id).min(1).max(200);
 
 /**
  * Crea una publicación con archivos de la biblioteca, en el orden en que se
@@ -556,7 +562,7 @@ export async function createPostFromAssets(input: {
   const { supabase, creator } = await ctxOrThrow();
   const projectId = Id.safeParse(input.projectId);
   const assetIds = AssetIds.safeParse(input.assetIds);
-  if (!projectId.success || !assetIds.success) return { error: "Selecciona al menos un archivo" };
+  if (!projectId.success || !assetIds.success) return { error: (await msg()).selectFile };
   const caption = z.string().max(10_000).parse(input.caption ?? "").trim();
 
   const { data: project } = await supabase
@@ -565,13 +571,13 @@ export async function createPostFromAssets(input: {
     .eq("id", projectId.data)
     .eq("creator_id", creator.id)
     .maybeSingle();
-  if (!project) return { error: "Proyecto no encontrado" };
+  if (!project) return { error: (await msg()).projectNotFound };
   // En una galería, las publicaciones son ESCENAS: sin límite de carrusel.
   const isScene = project.type === "photo_session";
   if (!isScene && assetIds.data.length > MAX_CAROUSEL) {
-    return { error: `Un carrusel admite como máximo ${MAX_CAROUSEL} archivos.` };
+    return { error: (await msg()).carouselMax(MAX_CAROUSEL) };
   }
-  if (isScene && !caption) return { error: "Escribe el título de la escena" };
+  if (isScene && !caption) return { error: (await msg()).sceneTitle };
 
   // Solo archivos propios, completos y libres (RLS + filtros).
   const { data: files } = await supabase
@@ -583,7 +589,7 @@ export async function createPostFromAssets(input: {
     .eq("upload_status", "complete")
     .is("post_id", null);
   if (!files || files.length !== assetIds.data.length) {
-    return { error: "Algunos archivos ya están en otra publicación o no existen. Recarga la página." };
+    return { error: (await msg()).filesTaken };
   }
 
   const { data: last } = await supabase
@@ -604,7 +610,7 @@ export async function createPostFromAssets(input: {
     })
     .select("id")
     .single();
-  if (error || !post) return { error: "No se pudo crear la publicación" };
+  if (error || !post) return { error: (await msg()).createPostFailed };
 
   const results = await Promise.all(
     assetIds.data.map((id, position) =>
@@ -614,13 +620,13 @@ export async function createPostFromAssets(input: {
   if (results.some((r) => r.error)) {
     // Deshacer: los archivos vuelven a la biblioteca.
     await supabase.from("posts").delete().eq("id", post.id);
-    return { error: "No se pudo crear la publicación" };
+    return { error: (await msg()).createPostFailed };
   }
 
   revalidatePath(`/dashboard/projects/${projectId.data}`);
   const n = assetIds.data.length;
-  if (isScene) return { message: `Escena “${caption}” creada con ${n} archivo(s).` };
-  return { message: n === 1 ? "Publicación creada." : `Carrusel de ${n} archivos creado.` };
+  if (isScene) return { message: (await msg()).sceneCreated(caption, n) };
+  return { message: (await msg()).postCreated(n) };
 }
 
 /** Añade archivos de la biblioteca al final de una publicación existente. */
@@ -628,7 +634,7 @@ export async function addAssetsToPost(input: { postId: string; assetIds: string[
   const { supabase, creator } = await ctxOrThrow();
   const postId = Id.safeParse(input.postId);
   const assetIds = AssetIds.safeParse(input.assetIds);
-  if (!postId.success || !assetIds.success) return { error: "Selecciona al menos un archivo" };
+  if (!postId.success || !assetIds.success) return { error: (await msg()).selectFile };
 
   const { data: post } = await supabase
     .from("posts")
@@ -636,13 +642,13 @@ export async function addAssetsToPost(input: { postId: string; assetIds: string[
     .eq("id", postId.data)
     .eq("creator_id", creator.id)
     .maybeSingle();
-  if (!post) return { error: "Publicación no encontrada" };
+  if (!post) return { error: (await msg()).postNotFound };
   const isScene = post.projects?.type === "photo_session";
 
   const { data: current } = await supabase.from("assets").select("position").eq("post_id", post.id);
   const count = current?.length ?? 0;
   if (!isScene && count + assetIds.data.length > MAX_CAROUSEL) {
-    return { error: `Esa publicación tiene ${count} archivos; un carrusel admite como máximo ${MAX_CAROUSEL}.` };
+    return { error: (await msg()).postFull(count, MAX_CAROUSEL) };
   }
   const start = (current ?? []).reduce((m, a) => Math.max(m, a.position), -1) + 1;
 
@@ -660,8 +666,8 @@ export async function addAssetsToPost(input: { postId: string; assetIds: string[
   revalidatePath(`/dashboard/projects/${post.project_id}`);
   const failed = results.filter((r) => r.error).length;
   return failed
-    ? { error: limitErrorFromDb(results.find((r) => r.error)?.error?.message)?.message ?? "Algunos archivos no se pudieron añadir." }
-    : { message: `Añadidos ${assetIds.data.length} archivo(s) a la ${isScene ? "escena" : "publicación"}.` };
+    ? { error: (await limitErrorFromDb(results.find((r) => r.error)?.error?.message))?.message ?? (await msg()).addFilesFailed }
+    : { message: (await msg()).filesAdded(assetIds.data.length, isScene) };
 }
 
 /** Quita un archivo de su publicación y lo devuelve a la biblioteca (no lo borra). */
@@ -708,14 +714,14 @@ export async function deletePost(formData: FormData): Promise<void> {
 export async function deleteAssets(input: { assetIds: string[] }): Promise<ActionState> {
   const { supabase, creator } = await ctxOrThrow();
   const assetIds = AssetIds.safeParse(input.assetIds);
-  if (!assetIds.success) return { error: "Selecciona al menos un archivo" };
+  if (!assetIds.success) return { error: (await msg()).selectFile };
 
   const { data: files } = await supabase
     .from("assets")
     .select("id, project_id, r2_key, r2_upload_id, upload_status")
     .in("id", assetIds.data)
     .eq("creator_id", creator.id);
-  if (!files || files.length === 0) return { error: "Archivos no encontrados" };
+  if (!files || files.length === 0) return { error: (await msg()).filesNotFound };
 
   await removeFilesFromR2(files);
   await supabase.from("assets").delete().in("id", files.map((f) => f.id)).eq("creator_id", creator.id);

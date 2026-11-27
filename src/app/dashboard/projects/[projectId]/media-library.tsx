@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { formatBytes } from "@/lib/format";
+import { useI18n } from "@/i18n/client";
 import { MAX_CAROUSEL_ITEMS } from "@/lib/constants";
 import { addAssetsToPost, createPostFromAssets, deleteAssets } from "../../actions";
 
@@ -19,8 +20,9 @@ export interface LibraryItem {
 type Notice = { error?: string; message?: string } | null;
 
 function Thumb({ item }: { item: LibraryItem }) {
+  const e = useI18n().t.editor;
   if (!item.url) {
-    return <span className="flex h-full w-full items-center justify-center bg-neutral-100 text-[11px] text-amber-700">Subiendo…</span>;
+    return <span className="flex h-full w-full items-center justify-center bg-neutral-100 text-[11px] text-amber-700">{e.uploading}</span>;
   }
   return item.kind === "photo" ? (
     // eslint-disable-next-line @next/next/no-img-element -- URL firmada de R2
@@ -50,7 +52,8 @@ export function MediaLibrary({
   posts: { id: string; label: string }[];
 }) {
   const isFeed = template === "feed";
-  const groupLabel = isFeed ? "Publicación" : "Escena";
+  const e = useI18n().t.editor;
+  const groupLabel = isFeed ? e.post : e.scene;
   const [selected, setSelected] = useState<string[]>([]);
   const [showUsed, setShowUsed] = useState(true);
   const [caption, setCaption] = useState("");
@@ -84,22 +87,22 @@ export function MediaLibrary({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <p className="text-neutral-600">
-          {items.length} {items.length === 1 ? "archivo" : "archivos"}
-          {` · ${free.length} ${isFeed ? "sin usar" : "sin escena"}`}
+          {e.files(items.length)}
+          {e.unused(free.length, isFeed)}
         </p>
         <label className="flex items-center gap-2 text-neutral-600">
           <input type="checkbox" checked={showUsed} onChange={(e) => setShowUsed(e.target.checked)} />
-          {isFeed ? "Mostrar también los que ya están en publicaciones" : "Mostrar también los que ya están en escenas"}
+          {e.showUsed(isFeed)}
         </label>
       </div>
 
       {visible.length === 0 ? (
         <p className="rounded-xl bg-neutral-50 p-6 text-center text-sm text-neutral-500">
           {items.length === 0
-            ? "Todavía no hay material. Súbelo arriba."
+            ? e.noMedia
             : isFeed
-              ? "Todo el material ya está en publicaciones."
-              : "Todas las fotos ya están en escenas."}
+              ? e.allInPosts
+              : e.allInScenes}
         </p>
       ) : (
         <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
@@ -148,11 +151,11 @@ export function MediaLibrary({
         <div className="sticky bottom-3 z-10 rounded-2xl border border-neutral-200 bg-white p-4 shadow-lg">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-semibold">
-              {n} seleccionado{n === 1 ? "" : "s"}
-              {isFeed && n > 1 ? <span className="font-normal text-neutral-500"> · el orden de los números será el del carrusel</span> : null}
+              {e.selected(n)}
+              {isFeed && n > 1 ? <span className="font-normal text-neutral-500">{e.carouselOrder}</span> : null}
             </p>
             <button type="button" className="text-sm text-neutral-500 hover:text-neutral-900" onClick={() => setSelected([])}>
-              Quitar selección
+              {e.clearSelection}
             </button>
           </div>
 
@@ -160,7 +163,7 @@ export function MediaLibrary({
             <div className="mt-3 space-y-3">
               <textarea
                 className="input min-h-20 text-sm"
-                placeholder="Copy de la publicación (opcional, también puedes escribirlo después)"
+                placeholder={e.captionPlaceholder}
                 value={caption}
                 maxLength={10000}
                 onChange={(e) => setCaption(e.target.value)}
@@ -172,11 +175,11 @@ export function MediaLibrary({
                   disabled={pending || n > MAX_CAROUSEL_ITEMS}
                   onClick={() => run(() => createPostFromAssets({ projectId, assetIds: selected, caption }))}
                 >
-                  {pending ? "Creando…" : n === 1 ? "Crear publicación" : `Crear carrusel (${n})`}
+                  {pending ? e.creating : n === 1 ? e.createPost : e.createCarousel(n)}
                 </button>
                 {posts.length > 0 ? (
                   <span className="flex items-center gap-2">
-                    <span className="text-sm text-neutral-500">o añadir a</span>
+                    <span className="text-sm text-neutral-500">{e.orAddTo}</span>
                     <select className="input w-auto py-1.5" value={targetPost} onChange={(e) => setTargetPost(e.target.value)}>
                       {posts.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -190,7 +193,7 @@ export function MediaLibrary({
                       disabled={pending || !targetPost}
                       onClick={() => run(() => addAssetsToPost({ postId: targetPost, assetIds: selected }))}
                     >
-                      Añadir
+                      {e.add}
                     </button>
                   </span>
                 ) : null}
@@ -199,23 +202,23 @@ export function MediaLibrary({
                   className="btn-ghost ml-auto text-red-600"
                   disabled={pending}
                   onClick={() => {
-                    if (window.confirm(`¿Eliminar ${n} archivo(s) definitivamente? No se puede deshacer.`)) {
+                    if (window.confirm(e.confirmDeleteFiles(n))) {
                       run(() => deleteAssets({ assetIds: selected }));
                     }
                   }}
                 >
-                  Eliminar
+                  {e.delete}
                 </button>
               </div>
               {n > MAX_CAROUSEL_ITEMS ? (
-                <p className="text-xs text-amber-700">Un carrusel admite como máximo {MAX_CAROUSEL_ITEMS} archivos.</p>
+                <p className="text-xs text-amber-700">{e.carouselMax(MAX_CAROUSEL_ITEMS)}</p>
               ) : null}
             </div>
           ) : (
             <div className="mt-3 space-y-3">
               <input
                 className="input text-sm"
-                placeholder="Título de la escena (p. ej. Ceremonia, Recepción, Retratos)"
+                placeholder={e.sceneTitlePlaceholder}
                 value={caption}
                 maxLength={80}
                 onChange={(e) => setCaption(e.target.value)}
@@ -227,11 +230,11 @@ export function MediaLibrary({
                   disabled={pending || !caption.trim()}
                   onClick={() => run(() => createPostFromAssets({ projectId, assetIds: selected, caption }))}
                 >
-                  {pending ? "Creando…" : `Crear escena (${n})`}
+                  {pending ? e.creating : e.createScene(n)}
                 </button>
                 {posts.length > 0 ? (
                   <span className="flex items-center gap-2">
-                    <span className="text-sm text-neutral-500">o añadir a</span>
+                    <span className="text-sm text-neutral-500">{e.orAddTo}</span>
                     <select className="input w-auto py-1.5" value={targetPost} onChange={(e) => setTargetPost(e.target.value)}>
                       {posts.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -245,7 +248,7 @@ export function MediaLibrary({
                       disabled={pending || !targetPost}
                       onClick={() => run(() => addAssetsToPost({ postId: targetPost, assetIds: selected }))}
                     >
-                      Añadir
+                      {e.add}
                     </button>
                   </span>
                 ) : null}
@@ -254,15 +257,15 @@ export function MediaLibrary({
                   className="btn-ghost ml-auto text-red-600"
                   disabled={pending}
                   onClick={() => {
-                    if (window.confirm(`¿Eliminar ${n} archivo(s) de la galería definitivamente? No se puede deshacer.`)) {
+                    if (window.confirm(e.confirmDeleteGalleryFiles(n))) {
                       run(() => deleteAssets({ assetIds: selected }));
                     }
                   }}
                 >
-                  Eliminar
+                  {e.delete}
                 </button>
               </div>
-              <p className="text-xs text-neutral-500">Las escenas son opcionales: sin escenas, tu cliente ve todas las fotos juntas.</p>
+              <p className="text-xs text-neutral-500">{e.scenesOptional}</p>
             </div>
           )}
         </div>

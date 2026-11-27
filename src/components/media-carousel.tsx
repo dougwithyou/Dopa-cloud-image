@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "@/i18n/client";
 
 export interface CarouselMedia {
   id: string;
@@ -28,6 +29,7 @@ export function MediaCarousel({
   dark?: boolean;
 }) {
   const [current, setCurrent] = useState(0);
+  const g = useI18n().t.gallery;
   const track = useRef<HTMLDivElement>(null);
   const count = media.length;
   const many = count > 1;
@@ -77,7 +79,7 @@ export function MediaCarousel({
             <button
               type="button"
               onClick={() => goTo(current - 1)}
-              aria-label="Anterior"
+              aria-label={g.previous}
               className="absolute left-2 top-1/2 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-lg shadow sm:flex"
             >
               ‹
@@ -87,7 +89,7 @@ export function MediaCarousel({
             <button
               type="button"
               onClick={() => goTo(current + 1)}
-              aria-label="Siguiente"
+              aria-label={g.next}
               className="absolute right-2 top-1/2 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-lg shadow sm:flex"
             >
               ›

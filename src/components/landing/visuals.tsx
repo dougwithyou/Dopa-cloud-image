@@ -30,7 +30,7 @@ export function Shot({ n, className = "" }: { n: number; className?: string }) {
 }
 
 /** Teléfono con el perfil y la cuadrícula de Instagram de un cliente. */
-export function PhoneMock({ className = "" }: { className?: string }) {
+export function PhoneMock({ className = "", caption }: { className?: string; caption: string }) {
   return (
     <div className={`rounded-[46px] bg-neutral-950 p-2.5 shadow-[0_40px_80px_-30px_rgb(0_0_0/0.45)] ${className}`} aria-hidden>
       <div className="overflow-hidden rounded-[38px] bg-white">
@@ -56,7 +56,7 @@ export function PhoneMock({ className = "" }: { className?: string }) {
           </div>
         </div>
         <p className="px-4 text-xs font-semibold">Café Lumbre</p>
-        <p className="px-4 pb-3 text-[11px] text-neutral-500">Contenido de marzo · listo para publicar</p>
+        <p className="px-4 pb-3 text-[11px] text-neutral-500">{caption}</p>
         <div className="grid grid-cols-3 gap-[2px]">
           {[0, 1, 6, 3, 5, 2, 7, 4, 1].map((n, i) => (
             <Shot key={i} n={n} className="aspect-[4/5]" />

@@ -1,6 +1,7 @@
 "use client";
 
 import type { FeedMedia } from "@/components/feed-post";
+import { useI18n } from "@/i18n/client";
 
 export type PhotoPixels = Record<string, { w: number; h: number }>;
 
@@ -25,6 +26,7 @@ export function GalleryPhotoPicker({
   /** Informa el tamaño real en píxeles de cada foto al cargarla. */
   onPixels?: (id: string, px: { w: number; h: number }) => void;
 }) {
+  const s = useI18n().t.store;
   const set = new Set(selected);
   const limit = max ?? photos.length;
   const allIds = photos.slice(0, limit).map((p) => p.id);
@@ -36,18 +38,18 @@ export function GalleryPhotoPicker({
   };
 
   if (photos.length === 0) {
-    return <p className="rounded-2xl bg-neutral-50 p-4 text-sm text-neutral-500">Esta galería no tiene fotos que se puedan imprimir.</p>;
+    return <p className="rounded-2xl bg-neutral-50 p-4 text-sm text-neutral-500">{s.noPrintable}</p>;
   }
 
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-3 text-sm">
         <span className="text-neutral-600">
-          <strong className="text-neutral-900">{selected.length}</strong> de {Math.min(photos.length, limit)} fotos de la galería
-          {max && photos.length > max ? ` (máximo ${max})` : ""}
+          {s.pickedOf(selected.length, Math.min(photos.length, limit))}
+          {max && photos.length > max ? s.maxN(max) : ""}
         </span>
         <button type="button" onClick={() => onChange(allSelected ? [] : allIds)} className="text-sm font-medium underline">
-          {allSelected ? "Quitar todas" : "Seleccionar todas"}
+          {allSelected ? s.clearAll : s.selectAll}
         </button>
       </div>
       <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5 lg:grid-cols-6">
@@ -60,7 +62,7 @@ export function GalleryPhotoPicker({
               type="button"
               onClick={() => toggle(p.id)}
               aria-pressed={on}
-              aria-label={`${on ? "Quitar" : "Elegir"} ${p.file_name}`}
+              aria-label={s.pickName(on, p.file_name)}
               className={`relative aspect-square overflow-hidden rounded-lg bg-neutral-100 ring-offset-2 transition ${on ? "ring-2 ring-neutral-900" : ""}`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element -- URL firmada de R2 */}
@@ -81,7 +83,7 @@ export function GalleryPhotoPicker({
               </span>
               {on && warnIds?.has(p.id) ? (
                 <span className="absolute inset-x-1 bottom-1 rounded bg-amber-100/95 px-1 py-0.5 text-[10px] leading-tight text-amber-900">
-                  Puede verse borrosa
+                  {s.mayBlur}
                 </span>
               ) : null}
             </button>

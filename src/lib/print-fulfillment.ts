@@ -102,6 +102,7 @@ async function notifyPaid(order: PrintOrderRow, items: { product_name: string; s
     lines: items.map((i) => ({ name: `${i.product_name} ${i.size_label}`, quantity: i.quantity, priceLabel: formatUsd(i.unit_price_cents * i.quantity) })),
     totalLabel: formatUsd(order.total_cents),
     orderLink: orderUrl(order.id),
+    locale: order.locale,
   });
   if (creator) {
     const to = await creatorEmail(creator);
@@ -110,9 +111,10 @@ async function notifyPaid(order: PrintOrderRow, items: { product_name: string; s
         to,
         businessName: creator.business_name,
         reference: order.reference,
-        galleryTitle: project?.title ?? "tu galería",
+        galleryTitle: project?.title ?? null,
         totalLabel: formatUsd(order.total_cents),
         earningsLabel: formatUsd(order.creator_earnings_cents),
+        locale: creator.locale,
       });
     }
   }
@@ -280,6 +282,7 @@ export async function failOrder(orderId: string, reason: string, finalStatus: "r
     reference: order.reference,
     refunded,
     orderLink: orderUrl(order.id),
+    locale: order.locale,
   }).catch((e) => console.error("[store] correo de problema", e));
 }
 
@@ -377,6 +380,7 @@ export async function applyLabEvent(ev: WhccEvent): Promise<void> {
           reference: order.reference,
           tracking: added,
           orderLink: orderUrl(order.id),
+          locale: order.locale,
         }).catch((e) => console.error("[store] correo de envío", e));
       }
       await transferEarnings(order.id);

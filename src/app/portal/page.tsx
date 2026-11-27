@@ -2,12 +2,17 @@ import Link from "next/link";
 import { ImageIcon } from "@/components/icons";
 import { requireUser } from "@/lib/auth";
 import { signDownloadUrl } from "@/lib/r2";
-import { formatDate, PROJECT_TYPE_LABEL } from "@/lib/format";
+import { formatDate } from "@/lib/format";
+import { getI18n } from "@/i18n/server";
 
-export const metadata = { title: "Mis proyectos" };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.portal.myProjects };
+}
 
 export default async function PortalPage() {
   const { supabase, user } = await requireUser("/portal");
+  const { t, locale } = await getI18n();
 
   // RLS limita los resultados a proyectos publicados del cliente autenticado
   // cuyo creador tiene la suscripción al día o está en periodo de gracia.
@@ -45,7 +50,7 @@ export default async function PortalPage() {
 
   return (
     <div className="mx-auto max-w-xl px-4 py-6">
-      <h1 className="mb-4 text-xl font-bold">Tus proyectos</h1>
+      <h1 className="mb-4 text-xl font-bold">{t.portal.yourProjects}</h1>
       {projects && projects.length > 0 ? (
         <ul className="grid grid-cols-2 gap-3">
           {projects.map((p) => (
@@ -64,9 +69,9 @@ export default async function PortalPage() {
                 <div className="p-3">
                   <p className="truncate text-sm font-semibold">{p.title}</p>
                   <p className="truncate text-xs text-neutral-500">
-                    {creatorName.get(p.creator_id) ?? ""} · {PROJECT_TYPE_LABEL[p.type]}
+                    {creatorName.get(p.creator_id) ?? ""} · {t.labels.projectType[p.type]}
                   </p>
-                  <p className="text-xs text-neutral-400">{formatDate(p.created_at)}</p>
+                  <p className="text-xs text-neutral-400">{formatDate(p.created_at, locale)}</p>
                 </div>
               </Link>
             </li>
@@ -74,7 +79,7 @@ export default async function PortalPage() {
         </ul>
       ) : (
         <div className="rounded-2xl border border-neutral-200 bg-white p-8 text-center text-sm text-neutral-500">
-          Todavía no hay proyectos publicados para ti. Te avisaremos cuando tu creador comparta contenido.
+          {t.portal.empty}
         </div>
       )}
     </div>

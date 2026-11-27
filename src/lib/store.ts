@@ -9,6 +9,10 @@ import { canUpload } from "@/lib/subscription";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { StoreConfig, StoreProduct } from "@/lib/store-types";
 import type { CreatorRow } from "@/types/database";
+import { DEFAULT_LOCALE, type Locale } from "@/i18n/config";
+import { getMessages } from "@/i18n/messages";
+import { localizeProduct } from "@/i18n/products";
+import { getLocale } from "@/i18n/server";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -17,8 +21,12 @@ export function creatorCanSell(creator: Pick<CreatorRow, "connect_payouts_enable
   return whccConfigured() && creator.connect_payouts_enabled && canUpload(creator);
 }
 
-/** Productos a la venta para un creador, con su precio final (sin costos). */
-export async function loadStoreProducts(admin: Admin, creator: Pick<CreatorRow, "id" | "store_markup_percent">) {
+/**
+ * Productos a la venta para un creador, con su precio final (sin costos), con
+ * los nombres en el idioma de la petición (o el indicado).
+ */
+export async function loadStoreProducts(admin: Admin, creator: Pick<CreatorRow, "id" | "store_markup_percent">, locale?: Locale) {
+  const t = getMessages(locale ?? (await getLocale().catch(() => DEFAULT_LOCALE)));
   const [{ data: products }, { data: overrides }] = await Promise.all([
     admin.from("print_products").select("*").eq("lab", LAB_ID).eq("active", true).order("sort"),
     admin.from("creator_product_prices").select("product_id, markup_percent, enabled").eq("creator_id", creator.id),
@@ -29,7 +37,7 @@ export async function loadStoreProducts(admin: Admin, creator: Pick<CreatorRow, 
     const o = byProduct.get(p.id);
     if (o && !o.enabled) continue;
     const markupPercent = o?.markup_percent ?? creator.store_markup_percent;
-    list.push({
+    list.push(localizeProduct({
       id: p.id,
       productRef: p.product_ref,
       productName: p.product_name,
@@ -48,7 +56,7 @@ export async function loadStoreProducts(admin: Admin, creator: Pick<CreatorRow, 
       costCents: p.cost_cents,
       selections: p.selections,
       markupPercent,
-    });
+    }, t));
   }
   return list;
 }

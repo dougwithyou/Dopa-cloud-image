@@ -17,12 +17,14 @@ import { SortableContext, arrayMove, rectSortingStrategy, sortableKeyboardCoordi
 import { CSS } from "@dnd-kit/utilities";
 import { MediaCarousel } from "@/components/media-carousel";
 import { formatBytes } from "@/lib/format";
+import { useI18n } from "@/i18n/client";
 import { deletePost, moveAsset, removeAssetFromPost, reorderPosts, updatePostCaption } from "../../actions";
 import type { EditorAsset, EditorPost } from "./post-card";
 
 function CarouselIcon() {
+  const label = useI18n().t.editor.carousel;
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5 drop-shadow" fill="white" aria-label="Carrusel">
+    <svg viewBox="0 0 24 24" className="h-5 w-5 drop-shadow" fill="white" aria-label={label}>
       <path d="M8 3h11a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-1V7a2 2 0 0 0-2-2H6V5a2 2 0 0 1 2-2Z" />
       <rect x="3" y="7" width="13" height="14" rx="2" />
     </svg>
@@ -38,7 +40,8 @@ function VideoIcon() {
 }
 
 function Thumb({ asset }: { asset: EditorAsset | undefined }) {
-  if (!asset?.url) return <span className="flex h-full w-full items-center justify-center bg-neutral-100 text-xs text-neutral-400">Sin archivos</span>;
+  const e = useI18n().t.editor;
+  if (!asset?.url) return <span className="flex h-full w-full items-center justify-center bg-neutral-100 text-xs text-neutral-400">{e.noFiles}</span>;
   return asset.kind === "photo" ? (
     // eslint-disable-next-line @next/next/no-img-element -- URL firmada de R2
     <img src={asset.url} alt="" draggable={false} className="pointer-events-none h-full w-full select-none object-cover" />
@@ -66,6 +69,7 @@ function TileFace({ post, dragging = false }: { post: EditorPost; dragging?: boo
 }
 
 function SortableTile({ post, onOpen }: { post: EditorPost; onOpen: () => void }) {
+  const e = useI18n().t.editor;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: post.id });
   return (
     <button
@@ -74,7 +78,7 @@ function SortableTile({ post, onOpen }: { post: EditorPost; onOpen: () => void }
       onClick={onOpen}
       style={{ transform: CSS.Transform.toString(transform), transition, touchAction: "manipulation" }}
       className={`block w-full select-none [-webkit-touch-callout:none] ${isDragging ? "opacity-30" : ""}`}
-      aria-label="Abrir publicación (mantén presionado para mover)"
+      aria-label={e.openPost}
       {...attributes}
       {...listeners}
     >
@@ -87,6 +91,7 @@ function SortableTile({ post, onOpen }: { post: EditorPost; onOpen: () => void }
 function PostModal({ post, index, onClose }: { post: EditorPost; index: number; onClose: () => void }) {
   const [caption, setCaption] = useState(post.caption ?? "");
   const [saved, setSaved] = useState(false);
+  const e = useI18n().t.editor;
   const [pending, startTransition] = useTransition();
   const count = post.assets.length;
 
@@ -128,19 +133,19 @@ function PostModal({ post, index, onClose }: { post: EditorPost; index: number; 
               <MediaCarousel key={post.assets.map((a) => a.id).join()} media={post.assets.filter((a): a is EditorAsset & { url: string } => !!a.url)} fit="fill" dark />
             </div>
           ) : (
-            <div className="flex h-40 items-center justify-center text-sm text-white/70">Esta publicación no tiene archivos</div>
+            <div className="flex h-40 items-center justify-center text-sm text-white/70">{e.postNoFilesShort}</div>
           )}
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col">
           <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
             <p className="text-sm font-semibold">
-              Publicación {index + 1}
+              {e.postN(index + 1)}
               <span className="ml-2 font-normal text-neutral-500">
-                {count > 1 ? `Carrusel · ${count}` : post.assets[0]?.kind === "video" ? "Video" : "Foto"}
+                {count > 1 ? e.carouselShort(count) : post.assets[0]?.kind === "video" ? e.video : e.photo}
               </span>
             </p>
-            <button type="button" onClick={onClose} className="px-2 text-2xl leading-none text-neutral-500" aria-label="Cerrar">
+            <button type="button" onClick={onClose} className="px-2 text-2xl leading-none text-neutral-500" aria-label={e.close}>
               ×
             </button>
           </header>
@@ -148,7 +153,7 @@ function PostModal({ post, index, onClose }: { post: EditorPost; index: number; 
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
             {count > 1 ? (
               <div>
-                <p className="mb-2 text-xs font-medium text-neutral-500">Orden del carrusel</p>
+                <p className="mb-2 text-xs font-medium text-neutral-500">{e.carouselOrderTitle}</p>
                 <ol className="flex gap-2 overflow-x-auto pb-1">
                   {post.assets.map((a, i) => (
                     <li key={a.id} className="w-20 shrink-0">
@@ -162,7 +167,7 @@ function PostModal({ post, index, onClose }: { post: EditorPost; index: number; 
                           disabled={i === 0 || pending}
                           onClick={() => startTransition(() => moveAsset(form({ assetId: a.id, direction: "left" })))}
                           className="px-1 disabled:opacity-30"
-                          aria-label="Mover a la izquierda"
+                          aria-label={e.moveLeft}
                         >
                           ←
                         </button>
@@ -171,16 +176,16 @@ function PostModal({ post, index, onClose }: { post: EditorPost; index: number; 
                           disabled={pending}
                           onClick={() => startTransition(() => removeAssetFromPost(form({ assetId: a.id })))}
                           className="px-1 text-neutral-500"
-                          title="Devolver a la biblioteca"
+                          title={e.backToLibrary}
                         >
-                          Quitar
+                          {e.remove}
                         </button>
                         <button
                           type="button"
                           disabled={i === count - 1 || pending}
                           onClick={() => startTransition(() => moveAsset(form({ assetId: a.id, direction: "right" })))}
                           className="px-1 disabled:opacity-30"
-                          aria-label="Mover a la derecha"
+                          aria-label={e.moveRight}
                         >
                           →
                         </button>
@@ -188,7 +193,7 @@ function PostModal({ post, index, onClose }: { post: EditorPost; index: number; 
                     </li>
                   ))}
                 </ol>
-                <p className="mt-1 text-[11px] text-neutral-400">“Quitar” devuelve el archivo a la biblioteca sin borrarlo.</p>
+                <p className="mt-1 text-[11px] text-neutral-400">{e.removeHelp}</p>
               </div>
             ) : count === 1 ? (
               <p className="truncate text-xs text-neutral-500">
@@ -197,16 +202,16 @@ function PostModal({ post, index, onClose }: { post: EditorPost; index: number; 
             ) : null}
 
             <div>
-              <label className="label" htmlFor="modal-caption">Copy de esta publicación</label>
+              <label className="label" htmlFor="modal-caption">{e.postCaption}</label>
               <textarea
                 id="modal-caption"
                 className="input min-h-44 text-sm"
                 value={caption}
                 maxLength={10000}
                 onChange={(e) => setCaption(e.target.value)}
-                placeholder={count > 1 ? "Texto para todo el carrusel: caption, hashtags, menciones…" : "Caption, hashtags, menciones…"}
+                placeholder={count > 1 ? e.carouselCaptionPlaceholder : e.shortCaptionPlaceholder}
               />
-              <p className="mt-1 text-right text-[11px] text-neutral-400">{caption.length} / 2.200 en Instagram</p>
+              <p className="mt-1 text-right text-[11px] text-neutral-400">{e.igCount(caption.length)}</p>
             </div>
           </div>
 
@@ -216,7 +221,7 @@ function PostModal({ post, index, onClose }: { post: EditorPost; index: number; 
               className="btn-ghost px-2 text-xs text-red-600"
               disabled={pending}
               onClick={() => {
-                if (window.confirm(`¿Eliminar la publicación ${index + 1}? Sus archivos vuelven a la biblioteca; el copy se pierde.`)) {
+                if (window.confirm(e.confirmDeleteFeedPost(index + 1))) {
                   startTransition(async () => {
                     await deletePost(form({ postId: post.id }));
                     onClose();
@@ -224,10 +229,10 @@ function PostModal({ post, index, onClose }: { post: EditorPost; index: number; 
                 }
               }}
             >
-              Eliminar publicación
+              {e.deletePost}
             </button>
             <button type="button" className="btn-primary" disabled={pending || !dirty} onClick={saveCaption}>
-              {pending ? "Guardando…" : saved ? "¡Guardado!" : "Guardar copy"}
+              {pending ? e.saving : saved ? e.savedBang : e.saveCaption}
             </button>
           </footer>
         </div>
@@ -246,6 +251,7 @@ export function FeedGridEditor({ projectId, posts }: { projectId: string; posts:
   const [openId, setOpenId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ error?: string; message?: string } | null>(null);
   const [, startTransition] = useTransition();
+  const e = useI18n().t.editor;
 
   // Si el servidor trae otra lista (publicación nueva o eliminada), se resincroniza.
   const serverKey = posts.map((p) => p.id).join();
@@ -305,7 +311,7 @@ export function FeedGridEditor({ projectId, posts }: { projectId: string; posts:
         </DndContext>
       </div>
       <p className="mt-2 text-center text-xs text-neutral-500">
-        Toca una publicación para ver y editar su copy. Para cambiar el orden, mantén presionada una publicación y arrástrala.
+        {e.gridHelp}
       </p>
       {notice?.error ? <p className="mt-2 text-center text-sm text-red-600">{notice.error}</p> : null}
       {notice?.message ? <p className="mt-2 text-center text-sm text-green-700">{notice.message}</p> : null}

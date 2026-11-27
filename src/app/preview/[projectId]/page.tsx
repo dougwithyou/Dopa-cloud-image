@@ -2,11 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireCreator } from "@/lib/auth";
 import { loadProjectContent } from "@/lib/project-content";
-import { PROJECT_STATUS_LABEL, PROJECT_TYPE_LABEL } from "@/lib/format";
 import { ProjectView } from "@/components/templates/project-view";
 import { loadStoreConfig } from "@/lib/store";
+import { getI18n } from "@/i18n/server";
 
-export const metadata = { title: "Vista previa" };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.portal.preview.meta };
+}
 
 /**
  * Vista previa para el creador: la misma plantilla que verá el cliente,
@@ -15,6 +18,8 @@ export const metadata = { title: "Vista previa" };
 export default async function PreviewPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
   const { supabase, creator } = await requireCreator();
+  const { t } = await getI18n();
+  const pv = t.portal.preview;
 
   const { data: project } = await supabase
     .from("projects")
@@ -34,11 +39,11 @@ export default async function PreviewPage({ params }: { params: Promise<{ projec
       <div className="bg-neutral-900 text-white">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 px-4 py-2 text-xs sm:text-sm">
           <span>
-            <strong>Vista previa</strong> · así lo verá {project.clients?.name ?? "tu cliente"} ·{" "}
-            {PROJECT_TYPE_LABEL[project.type]} · {PROJECT_STATUS_LABEL[project.status]}
+            <strong>{pv.label}</strong> · {pv.seenBy(project.clients?.name ?? null)} · {t.labels.projectType[project.type]} ·{" "}
+            {t.labels.projectStatus[project.status]}
           </span>
           <Link href={`/dashboard/projects/${project.id}`} className="rounded-full bg-white px-3 py-1 font-semibold text-neutral-900">
-            ← Volver al proyecto
+            {pv.back}
           </Link>
         </div>
       </div>

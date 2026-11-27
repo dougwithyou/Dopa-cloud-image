@@ -1,5 +1,6 @@
 import { formatBytes } from "@/lib/format";
 import { SubmitButton } from "@/components/submit-button";
+import { getI18n } from "@/i18n/server";
 import { deletePost, moveAsset, movePost, removeAssetFromPost, updatePostCaption } from "../../actions";
 
 export interface EditorAsset {
@@ -34,7 +35,7 @@ function Media({ asset, className }: { asset: EditorAsset; className: string }) 
 }
 
 /** Tarjeta de una publicación en el panel: archivos, copy y acciones. */
-export function PostCard({
+export async function PostCard({
   post,
   index,
   total,
@@ -49,16 +50,17 @@ export function PostCard({
   const isScene = variant === "scene";
   const count = post.assets.length;
   const isCarousel = count > 1;
+  const e = (await getI18n()).t.editor;
   const label = isScene
-    ? `${count} ${count === 1 ? "archivo" : "archivos"}`
+    ? e.files(count)
     : count === 0
-      ? "Sin archivos"
+      ? e.noFiles
       : isCarousel
-        ? `Carrusel · ${count} archivos`
+        ? e.carouselFiles(count)
         : post.assets[0].kind === "video"
-          ? "Video"
-          : "Foto";
-  const noun = isScene ? "Escena" : "Publicación";
+          ? e.video
+          : e.photo;
+  const noun = isScene ? e.scene : e.post;
 
   return (
     <li className="card overflow-hidden">
@@ -74,21 +76,21 @@ export function PostCard({
           <form action={movePost}>
             <input type="hidden" name="postId" value={post.id} />
             <input type="hidden" name="direction" value="up" />
-            <button className="btn-ghost px-2 py-1" disabled={index === 0} aria-label={`Subir ${noun.toLowerCase()}`}>↑</button>
+            <button className="btn-ghost px-2 py-1" disabled={index === 0} aria-label={e.moveUp(isScene)}>↑</button>
           </form>
           <form action={movePost}>
             <input type="hidden" name="postId" value={post.id} />
             <input type="hidden" name="direction" value="down" />
-            <button className="btn-ghost px-2 py-1" disabled={index === total - 1} aria-label={`Bajar ${noun.toLowerCase()}`}>↓</button>
+            <button className="btn-ghost px-2 py-1" disabled={index === total - 1} aria-label={e.moveDown(isScene)}>↓</button>
           </form>
           <form action={deletePost}>
             <input type="hidden" name="postId" value={post.id} />
             <SubmitButton
               className="btn-ghost px-2 py-1 text-xs text-red-600"
               pendingLabel="…"
-              confirm={`¿Eliminar la ${noun.toLowerCase()} ${index + 1}? ${count > 0 ? "Sus archivos vuelven a la biblioteca" : "No tiene archivos"}${isScene ? "." : "; el copy se pierde."}`}
+              confirm={e.confirmDeletePost(isScene, index + 1, count > 0)}
             >
-              Eliminar
+              {e.delete}
             </SubmitButton>
           </form>
         </div>
@@ -118,29 +120,29 @@ export function PostCard({
                     <form action={moveAsset}>
                       <input type="hidden" name="assetId" value={asset.id} />
                       <input type="hidden" name="direction" value="left" />
-                      <button className="btn-ghost px-1.5 py-0.5 text-xs" disabled={i === 0} aria-label="Mover a la izquierda">←</button>
+                      <button className="btn-ghost px-1.5 py-0.5 text-xs" disabled={i === 0} aria-label={e.moveLeft}>←</button>
                     </form>
                     <form action={removeAssetFromPost}>
                       <input type="hidden" name="assetId" value={asset.id} />
                       <SubmitButton className="btn-ghost px-1.5 py-0.5 text-xs" pendingLabel="…">
-                        Quitar
+                        {e.remove}
                       </SubmitButton>
                     </form>
                     <form action={moveAsset}>
                       <input type="hidden" name="assetId" value={asset.id} />
                       <input type="hidden" name="direction" value="right" />
-                      <button className="btn-ghost px-1.5 py-0.5 text-xs" disabled={i === count - 1} aria-label="Mover a la derecha">→</button>
+                      <button className="btn-ghost px-1.5 py-0.5 text-xs" disabled={i === count - 1} aria-label={e.moveRight}>→</button>
                     </form>
                   </div>
                 </li>
               ))}
             </ol>
           ) : (
-            <p className="rounded-xl bg-neutral-50 p-4 text-sm text-neutral-500">Esta publicación aún no tiene archivos.</p>
+            <p className="rounded-xl bg-neutral-50 p-4 text-sm text-neutral-500">{e.postNoFiles}</p>
           )}
 
           {count > 1 ? (
-            <p className="text-xs text-neutral-500">“Quitar” devuelve el archivo a la biblioteca sin borrarlo.</p>
+            <p className="text-xs text-neutral-500">{e.removeHelp}</p>
           ) : null}
         </div>
 
@@ -148,7 +150,7 @@ export function PostCard({
         <form action={updatePostCaption} className="flex min-w-0 flex-col gap-2">
           <input type="hidden" name="postId" value={post.id} />
           <label className="label" htmlFor={`caption-${post.id}`}>
-            {isScene ? "Título de la escena" : "Copy de esta publicación"}
+            {isScene ? e.sceneTitle : e.postCaption}
           </label>
           {isScene ? (
             <input
@@ -156,7 +158,7 @@ export function PostCard({
               name="caption"
               className="input text-sm"
               defaultValue={post.caption?.split("\n")[0] ?? ""}
-              placeholder="Ceremonia, Recepción, Retratos…"
+              placeholder={e.scenePlaceholder}
               maxLength={80}
             />
           ) : (
@@ -167,14 +169,14 @@ export function PostCard({
               defaultValue={post.caption ?? ""}
               placeholder={
                 isCarousel
-                  ? "Texto para todo el carrusel: caption, hashtags, menciones…"
-                  : "Caption, hashtags, menciones… Tu cliente lo copiará en un clic."
+                  ? e.carouselCaptionPlaceholder
+                  : e.singleCaptionPlaceholder
               }
               maxLength={10000}
             />
           )}
-          <SubmitButton className="btn-secondary self-start px-3 py-1.5 text-xs" pendingLabel="Guardando…">
-            {isScene ? "Guardar título" : "Guardar copy"}
+          <SubmitButton className="btn-secondary self-start px-3 py-1.5 text-xs" pendingLabel={e.saving}>
+            {isScene ? e.saveTitle : e.saveCaption}
           </SubmitButton>
         </form>
       </div>

@@ -3,17 +3,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDate } from "@/lib/format";
 import { formatUsd } from "@/lib/print-pricing";
 import { verifyOrderToken } from "@/lib/store";
-import { ORDER_STATUS_LABEL } from "@/lib/store-types";
 import { ClearCart } from "./clear-cart";
+import { getI18n } from "@/i18n/server";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Tu pedido", robots: { index: false, follow: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t.store.orderMeta, robots: { index: false, follow: false } };
+}
 
-const STEPS = [
-  { key: "paid", label: "Pagado" },
-  { key: "in_production", label: "En producción" },
-  { key: "shipped", label: "Enviado" },
-] as const;
+const STEPS = ["paid", "in_production", "shipped"] as const;
 
 function stepIndex(status: string): number {
   if (status === "shipped") return 2;
@@ -31,16 +30,18 @@ export default async function OrderPage({
   searchParams: Promise<{ t?: string; pagado?: string }>;
 }) {
   const { orderId } = await params;
-  const { t, pagado } = await searchParams;
-  const valid = /^[0-9a-f-]{36}$/i.test(orderId) && verifyOrderToken(orderId, t);
+  const { t: token, pagado } = await searchParams;
+  const valid = /^[0-9a-f-]{36}$/i.test(orderId) && verifyOrderToken(orderId, token);
+  const { t, locale } = await getI18n();
+  const s = t.store;
   const admin = createAdminClient();
   const order = valid ? (await admin.from("print_orders").select("*").eq("id", orderId).maybeSingle()).data : null;
 
   if (!order) {
     return (
       <main className="flex min-h-dvh flex-col items-center justify-center bg-neutral-50 px-4 text-center">
-        <h1 className="text-2xl font-semibold">Pedido no encontrado</h1>
-        <p className="mt-2 max-w-sm text-sm text-neutral-500">Abre el enlace que te enviamos por correo.</p>
+        <h1 className="text-2xl font-semibold">{s.orderNotFound}</h1>
+        <p className="mt-2 max-w-sm text-sm text-neutral-500">{s.orderNotFoundText}</p>
       </main>
     );
   }
@@ -61,37 +62,37 @@ export default async function OrderPage({
         <div className="text-center">
           <p className="text-sm text-neutral-500">{creator?.business_name}</p>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-            {waiting ? "Confirmando tu pago…" : pagado === "1" ? "¡Gracias por tu pedido!" : "Tu pedido"}
+            {waiting ? s.confirming : pagado === "1" ? s.thanks : s.yourOrder}
           </h1>
           <p className="mt-1 text-sm text-neutral-500">
-            {order.reference} · {formatDate(order.created_at)}
+            {order.reference} · {formatDate(order.created_at, locale)}
           </p>
         </div>
 
         <section className="rounded-2xl border border-neutral-200 bg-white p-5">
           {current >= 0 ? (
             <ol className="grid grid-cols-3 gap-2 text-center text-xs">
-              {STEPS.map((s, i) => (
-                <li key={s.key}>
+              {STEPS.map((key, i) => (
+                <li key={key}>
                   <span className={`mx-auto block h-1.5 rounded-full ${i <= current ? "bg-neutral-900" : "bg-neutral-200"}`} />
-                  <span className={`mt-2 block ${i <= current ? "font-semibold" : "text-neutral-400"}`}>{s.label}</span>
+                  <span className={`mt-2 block ${i <= current ? "font-semibold" : "text-neutral-400"}`}>{t.labels.orderStatus[key]}</span>
                 </li>
               ))}
             </ol>
           ) : (
             <p className="text-center text-sm">
-              <strong>{ORDER_STATUS_LABEL[order.status]}</strong>
-              {order.status === "refunded" ? " · te devolvimos el dinero completo." : ""}
+              <strong>{t.labels.orderStatus[order.status]}</strong>
+              {order.status === "refunded" ? s.refunded : ""}
             </p>
           )}
           {order.tracking.length > 0 ? (
             <div className="mt-4 space-y-1 text-sm">
               {order.tracking.map((tr, i) => (
                 <p key={i}>
-                  {tr.carrier ?? "Paquete"}:{" "}
+                  {tr.carrier ?? s.package}:{" "}
                   {tr.trackingUrl ? (
                     <a href={tr.trackingUrl} target="_blank" rel="noreferrer" className="font-medium underline">
-                      {tr.trackingNumber ?? "seguimiento"}
+                      {tr.trackingNumber ?? s.tracking}
                     </a>
                   ) : (
                     tr.trackingNumber
@@ -101,7 +102,7 @@ export default async function OrderPage({
             </div>
           ) : current >= 0 && current < 2 ? (
             <p className="mt-4 text-center text-xs text-neutral-500">
-              Te escribiremos a {order.buyer_email} cuando salga, con el número de seguimiento.
+              {s.willEmail(order.buyer_email)}
             </p>
           ) : null}
         </section>
@@ -120,24 +121,24 @@ export default async function OrderPage({
           </ul>
           <dl className="mt-3 space-y-1 border-t border-neutral-100 pt-3 text-sm">
             <div className="flex justify-between">
-              <dt className="text-neutral-500">Envío</dt>
+              <dt className="text-neutral-500">{s.shippingShort}</dt>
               <dd className="tabular-nums">{formatUsd(order.shipping_cents)}</dd>
             </div>
             {order.tax_cents > 0 ? (
               <div className="flex justify-between">
-                <dt className="text-neutral-500">Impuestos</dt>
+                <dt className="text-neutral-500">{s.taxes}</dt>
                 <dd className="tabular-nums">{formatUsd(order.tax_cents)}</dd>
               </div>
             ) : null}
             <div className="flex justify-between font-semibold">
-              <dt>Total</dt>
+              <dt>{s.total}</dt>
               <dd className="tabular-nums">{formatUsd(order.total_cents || order.subtotal_cents + order.shipping_cents)}</dd>
             </div>
           </dl>
         </section>
 
         <section className="rounded-2xl border border-neutral-200 bg-white p-5 text-sm">
-          <p className="font-medium">Se envía a</p>
+          <p className="font-medium">{s.shipsTo}</p>
           <p className="mt-1 text-neutral-600">
             {address.name}
             <br />

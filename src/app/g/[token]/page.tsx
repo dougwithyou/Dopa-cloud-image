@@ -8,9 +8,14 @@ import { APP_NAME } from "@/lib/env";
 import { ProjectView } from "@/components/templates/project-view";
 import { GateForm } from "./gate-form";
 import { loadStoreConfig } from "@/lib/store";
+import { LanguageSwitch } from "@/components/language-switch";
+import { getI18n } from "@/i18n/server";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Galería", robots: { index: false, follow: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t.portal.share.meta, robots: { index: false, follow: false } };
+}
 
 /**
  * Galería compartida por enlace. Quien entra deja nombre, apellido y correo
@@ -19,13 +24,14 @@ export const metadata: Metadata = { title: "Galería", robots: { index: false, f
 export default async function SharedGalleryPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const gallery = await findSharedGallery(token);
+  const s = (await getI18n()).t.portal.share;
 
   if (!gallery) {
     return (
       <main className="flex min-h-dvh flex-col items-center justify-center bg-neutral-50 px-4 text-center">
-        <h1 className="text-2xl font-semibold">Este enlace no está disponible</h1>
+        <h1 className="text-2xl font-semibold">{s.unavailableTitle}</h1>
         <p className="mt-2 max-w-sm text-sm text-neutral-500">
-          La galería ya no se comparte por enlace o la dirección es incorrecta. Pide un enlace nuevo a quien te la envió.
+          {s.unavailableText}
         </p>
         <p className="mt-10 text-xs text-neutral-400">{APP_NAME}</p>
       </main>
@@ -71,8 +77,9 @@ export default async function SharedGalleryPage({ params }: { params: Promise<{ 
       <div className="relative w-full max-w-md rounded-2xl bg-white p-6 text-center shadow-2xl sm:p-8">
         <p className="text-xs uppercase tracking-[0.3em] text-neutral-500">{gallery.businessName}</p>
         <h1 className="mt-3 font-serif text-3xl uppercase tracking-[0.12em]">{gallery.title}</h1>
-        <p className="mb-6 mt-3 text-sm text-neutral-600">Déjanos tus datos para ver la galería.</p>
+        <p className="mb-6 mt-3 text-sm text-neutral-600">{s.lead}</p>
         <GateForm token={token} businessName={gallery.businessName} />
+        <LanguageSwitch className="mt-5 text-neutral-500" />
       </div>
     </main>
   );

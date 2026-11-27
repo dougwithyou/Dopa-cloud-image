@@ -1,11 +1,13 @@
 import { PLANS, PLAN_IDS, formatPrice, type PlanId } from "@/lib/plans";
 import { CheckIcon } from "@/components/icons";
+import { getI18n } from "@/i18n/server";
 
 /** Tarjetas de selección de plan (radio inputs nativos, sin JS). */
-export function PlanPicker({ defaultPlan = "medium" }: { defaultPlan?: PlanId }) {
+export async function PlanPicker({ defaultPlan = "medium" }: { defaultPlan?: PlanId }) {
+  const { t } = await getI18n();
   return (
     <fieldset className="grid gap-3 sm:grid-cols-3">
-      <legend className="label mb-2">Elige tu plan</legend>
+      <legend className="label mb-2">{t.auth.onboarding.choosePlan}</legend>
       {PLAN_IDS.map((id) => {
         const plan = PLANS[id];
         return (
@@ -17,10 +19,10 @@ export function PlanPicker({ defaultPlan = "medium" }: { defaultPlan?: PlanId })
             <span className="text-sm font-semibold">{plan.name}</span>
             <span className="text-2xl font-bold">
               {formatPrice(plan)}
-              <span className="text-sm font-normal text-neutral-500">/mes</span>
+              <span className="text-sm font-normal text-neutral-500">{t.auth.onboarding.perMonth}</span>
             </span>
             <ul className="space-y-1 text-xs text-neutral-600">
-              {plan.highlights.map((h) => (
+              {t.labels.planHighlights[id].map((h) => (
                 <li key={h} className="flex items-start gap-1.5"><CheckIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-green-600" />{h}</li>
               ))}
             </ul>
